@@ -11,6 +11,61 @@ This MCP server acts as a local WebSocket bridge, allowing agentic AI coding ass
 
 ---
 
+## 🎛️ The Monolith Engine Modules & MCP Integration
+
+While this repository focuses on the secure **MCP WebSocket Server**, here is a brief overview of the Monolith Engine modules that you can control. You can experience the complete interactive synthesizer live on [salban.de](https://salban.de).
+
+### What makes the MCP Integration so unique?
+Traditional music software relies on complex MIDI mappings, local file transfers, or closed scripting languages. The **SAL BAN MCP integration** breaks these barriers by exposing the entire synth state and sequencer controls as **natural language tools** to AI models. This allows an AI agent to:
+- Code complex arpeggios, Goa trance rolling basslines, or syncopated breaks on the fly using standard programming loops.
+- Programmatically synthesize new raw waveforms in Node.js and load them directly into the browser's audio buffer (e.g., custom drums or sweeps).
+- Tweak synthesis knobs (cutoff, resonance, LFO speed) dynamically based on natural language commands (e.g., *"make it squelchier"* or *"slow down the tempo"*).
+
+---
+
+### Core Synthesizer Modules
+
+<table>
+  <tr>
+    <td width="50%">
+      <h4>🎹 Synth Voices Block</h4>
+      <p>Dual-voice synthesizer consisting of a dedicated <strong>Bassline</strong> and <strong>Lead</strong> synth engine, utilizing sawtooth, square, triangle, sine, and custom wavetable waveforms with resonant filters.</p>
+      <img src="assets/01-Synth-voices-block.png" alt="Synth Voices Block" />
+    </td>
+    <td width="50%">
+      <h4>🥁 Drum Voices Block</h4>
+      <p>Dedicated analog-style drum synthesizers for <strong>Kick</strong>, <strong>Snare</strong>, and <strong>Hat</strong> with fine-tunable pitch, decay, and accent parameters.</p>
+      <img src="assets/02-Drum-voices-block.png" alt="Drum Voices Block" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h4>🎙️ Phrase & One-Shot Samplers</h4>
+      <p>An 8-pad sampler featuring phrase looping and one-shot playback capabilities. Supports real-time sample loading via Base64 injection from the AI client.</p>
+      <img src="assets/03-Phrase-Sampler.png" alt="Phrase Sampler" />
+    </td>
+    <td width="50%">
+      <h4>🎛️ LFO Modulation Matrix</h4>
+      <p>A multi-slot LFO matrix permitting routing of sine, triangle, saw, square, and sample-and-hold modulators to filter cutoffs, levels, fuzz, or panning.</p>
+      <img src="assets/05-lfo-Matrix.png" alt="LFO Matrix" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h4>🎚️ Mixer & Studio FX Control</h4>
+      <p>A multi-channel mixer with levels, panning, and aux sends routing into studio-grade return effects (Fuzz distortion, Delay, and Reverb).</p>
+      <img src="assets/07-mixer.png" alt="Mixer and FX Controls" />
+    </td>
+    <td width="50%">
+      <h4>🎼 Step Sequencer & Patch Center</h4>
+      <p>A 16-step sequencer pattern grid for all drums, synths, and samplers, backed by preset patch loading and real-time transport sync.</p>
+      <img src="assets/011-sequencer.png" alt="Step Sequencer" />
+    </td>
+  </tr>
+</table>
+
+---
+
 ## 📐 Architecture & Data Flow
 
 The integration runs entirely on the user's local machine, establishing a secure loopback connection between the browser, the sandboxed Docker container, and the AI client.
