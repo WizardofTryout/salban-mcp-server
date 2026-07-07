@@ -1,0 +1,18 @@
+Copyright (c) 2026 Matthias Köhler (Oszillation Media & AI Ecosystems). All rights reserved.
+
+CONFIDENTIAL AND PROPRIETARY.
+
+This software, architectural blueprints, server configurations, and all associated documentation files (the "Software") are the exclusive intellectual property of Matthias Köhler. 
+
+LICENSE FOR EVALUATION PURPOSES ONLY:
+Permission is hereby granted strictly and solely to TÜV SÜD Akademie GmbH and its designated internal technical evaluators (including Dr. Ibrahim Halfaoui) to review and evaluate these blueprints and source code internally. This permission is granted exclusively in connection with the ongoing discussions regarding a potential strategic cooperation.
+
+STRICTLY PROHIBITED USES:
+1. Any commercial use, production deployment, or integration of these blueprints, servers, or architectural frameworks into internal or customer-facing enterprise offerings is strictly prohibited without a prior, separate written commercial license agreement signed by Matthias Köhler.
+2. Modification, distribution, sublicensing, mirroring, or disclosing of the source code or architectural patterns to any third party outside the designated evaluation team is strictly prohibited.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY.
+
+---
+THIRD-PARTY PROTOCOL NOTICE:
+The Model Context Protocol (MCP) is an open-source specification and standard. The proprietary and confidential restrictions set forth by Matthias Köhler apply exclusively to the specific production-grade implementations, custom server blueprints, air-gap orchestration patterns, and zero-trust data flow configurations developed by Matthias Köhler. This license does not modify, extend, or infringe upon the original open-source terms of the underlying MCP specification or its standard SDKs.
