@@ -132,6 +132,17 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
         currentPresetState = data.preset;
         console.error("[WS] Cached preset updated from browser client");
       }
+
+      // Broadcast control messages from other clients (e.g. scripts/AI) to all other clients (e.g. browser)
+      if (data && (data.type === "load_phrase" || data.type === "load_sample" || data.type === "apply_preset" || data.type === "tweak_parameter")) {
+        console.error(`[WS] Received broadcast request for type "${data.type}"`);
+        const textMessage = message.toString();
+        wss.clients.forEach((client: WebSocket) => {
+          if (client !== ws && client.readyState === WebSocket.OPEN) {
+            client.send(textMessage);
+          }
+        });
+      }
     } catch (e: any) {
       console.error("[WS] Error parsing client message:", e.message);
       if (!isClientAuthenticated) {
@@ -327,6 +338,52 @@ server.tool(
   }
 );
 
+// Tool 13: Inject Base64 audio sample directly into the central Phrase Sampler
+server.tool(
+  "salban_load_phrase",
+  "Loads a Base64 encoded audio sample (WAV, MP3, etc.) directly into the central Phrase Sampler of the Monolith Engine.",
+  {
+    data: z.string().describe("The audio file binary data encoded as a Base64 string"),
+    name: z.string().optional().describe("Optional display name for the loaded phrase (e.g. 'Drum Loop')")
+  },
+  async ({ data, name }: { data: string; name?: string }) => {
+    if (wss.clients.size === 0) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Error: Cannot load phrase. No browser client is connected. Open salban.de in a local web browser first."
+          }
+        ],
+        isError: true
+      };
+    }
+
+    const payload = JSON.stringify({
+      type: "load_phrase",
+      data,
+      name: name || "AI Phrase"
+    });
+
+    let sentCount = 0;
+    wss.clients.forEach((client: WebSocket) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(payload);
+        sentCount++;
+      }
+    });
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Successfully broadcasted phrase sample injection request to ${sentCount} connected client(s).`
+        }
+      ]
+    };
+  }
+);
+
 // Tool 5: Synthesize and inject a programmatically generated sample
 server.tool(
   "salban_inject_mcp_sample",
@@ -489,7 +546,7 @@ function clonePreset(): any {
 // ─── VOICE ID helpers ───────────────────────────────────────────────────────
 const DRUM_VOICES = ["kick", "snare", "hat"] as const;
 const SYNTH_VOICES = ["bass", "lead"] as const;
-const ALL_VOICES = ["bass", "lead", "kick", "snare", "hat", ...Array.from({ length: 8 }, (_, i) => `pad${i}`)] as const;
+const ALL_VOICES = ["bass", "lead", "kick", "snare", "hat", "sampler", ...Array.from({ length: 8 }, (_, i) => `pad${i}`)] as const;
 type DrumVoice = typeof DRUM_VOICES[number];
 type SynthVoice = typeof SYNTH_VOICES[number];
 
@@ -498,9 +555,9 @@ type SynthVoice = typeof SYNTH_VOICES[number];
 // Tool 6: Read a single voice sequence without loading the full preset
 server.tool(
   "salban_get_sequence",
-  "Returns only the 16-step sequence for one voice (kick, snare, hat, bass, lead, pad0–pad7). Much faster than salban_get_preset because it returns only the relevant array.",
+  "Returns only the 16-step sequence for one voice (kick, snare, hat, bass, lead, sampler, pad0–pad7). Much faster than salban_get_preset because it returns only the relevant array.",
   {
-    voice: z.string().describe("Voice name: kick | snare | hat | bass | lead | pad0 … pad7")
+    voice: z.string().describe("Voice name: kick | snare | hat | bass | lead | sampler | pad0 … pad7")
   },
   async ({ voice }: { voice: string }) => {
     const guard = requirePreset();
@@ -514,13 +571,14 @@ server.tool(
     else if (voice === "kick")  data = seq.kick;
     else if (voice === "snare") data = seq.snare;
     else if (voice === "hat")   data = seq.hat;
+    else if (voice === "sampler") data = seq.sampler;
     else if (/^pad[0-7]$/.test(voice)) {
       const idx = parseInt(voice[3], 10);
       data = seq.pads?.[idx];
     }
 
     if (!data) {
-      return { content: [{ type: "text", text: `Unknown voice: "${voice}". Use kick|snare|hat|bass|lead|pad0–pad7.` }], isError: true };
+      return { content: [{ type: "text", text: `Unknown voice: "${voice}". Use kick|snare|hat|bass|lead|sampler|pad0–pad7.` }], isError: true };
     }
 
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
@@ -554,6 +612,36 @@ server.tool(
 
     const sent = broadcastToClients({ type: "apply_preset", preset });
     return { content: [{ type: "text", text: `Pad ${padIndex} sequence updated and sent to ${sent} client(s).` }] };
+  }
+);
+
+// Tool 14: Set 16 steps for the Phrase Sampler (sampler)
+server.tool(
+  "salban_set_sampler_sequence",
+  "Sets the 16-step sequence for the Phrase Sampler. Each step has active, pitch, reverse, tie, and vol.",
+  {
+    steps: z.array(z.object({
+      active:  z.boolean().describe("Whether the step triggers"),
+      pitch:   z.number().describe("Pitch offset in semitones (e.g. 0, 5, -12)"),
+      reverse: z.boolean().describe("Play sample reversed"),
+      tie:     z.boolean().describe("Tie (sustain) into the next step"),
+      vol:     z.number().min(0).max(100).describe("Step volume 0–100")
+    })).length(16).describe("Exactly 16 step objects")
+  },
+  async ({ steps }: { steps: { active: boolean; pitch: number; reverse: boolean; tie: boolean; vol: number }[] }) => {
+    const guard = requirePreset();
+    if (!guard.ok) return guard.result;
+
+    const preset = clonePreset();
+    if (!preset.sequences?.sampler) {
+      return { content: [{ type: "text", text: "Error: preset.sequences.sampler not found in cached state." }], isError: true };
+    }
+
+    preset.sequences.sampler = steps;
+    currentPresetState = preset;
+
+    const sent = broadcastToClients({ type: "apply_preset", preset });
+    return { content: [{ type: "text", text: `Phrase Sampler sequence updated and sent to ${sent} client(s).` }] };
   }
 );
 
@@ -645,9 +733,9 @@ server.tool(
 // Tool 11: Clear (silence) all steps of a voice
 server.tool(
   "salban_clear_sequence",
-  "Silences all 16 steps of a voice in one call. Drum voices are set to 0 (off); synth voices have active=false; pad sequences have active=false.",
+  "Silences all 16 steps of a voice in one call. Drum voices are set to 0 (off); synth voices have active=false; pad and sampler sequences have active=false.",
   {
-    voice: z.string().describe("Voice to clear: kick | snare | hat | bass | lead | pad0–pad7")
+    voice: z.string().describe("Voice to clear: kick | snare | hat | bass | lead | sampler | pad0–pad7")
   },
   async ({ voice }: { voice: string }) => {
     const guard = requirePreset();
@@ -662,11 +750,13 @@ server.tool(
       seq.bass = seq.bass.map((s: any) => ({ ...s, active: false }));
     } else if (voice === "lead") {
       seq.lead = seq.lead.map((s: any) => ({ ...s, active: false }));
+    } else if (voice === "sampler") {
+      seq.sampler = seq.sampler.map((s: any) => ({ ...s, active: false, tie: false }));
     } else if (/^pad[0-7]$/.test(voice)) {
       const idx = parseInt(voice[3], 10);
       seq.pads[idx] = seq.pads[idx].map((s: any) => ({ ...s, active: false }));
     } else {
-      return { content: [{ type: "text", text: `Unknown voice: "${voice}". Use kick|snare|hat|bass|lead|pad0–pad7.` }], isError: true };
+      return { content: [{ type: "text", text: `Unknown voice: "${voice}". Use kick|snare|hat|bass|lead|sampler|pad0–pad7.` }], isError: true };
     }
 
     currentPresetState = preset;
@@ -701,6 +791,8 @@ const SCHEMA_INFO = {
     "mixer.hat.level", "mixer.hat.pan", "mixer.hat.dlySend", "mixer.hat.revSend", "mixer.hat.fuzSend", "mixer.hat.mute",
     "mixer.sampler.level", "mixer.sampler.pan", "mixer.sampler.dlySend", "mixer.sampler.revSend", "mixer.sampler.fuzSend", "mixer.sampler.mute",
     "mixer.pads.level", "mixer.pads.pan", "mixer.pads.dlySend", "mixer.pads.revSend", "mixer.pads.fuzSend", "mixer.pads.mute",
+    "synthParams.sampler.cutoff", "synthParams.sampler.resonance", "synthParams.sampler.decay", "synthParams.sampler.stutter", "synthParams.sampler.chorus", "synthParams.sampler.ambientDecay", "synthParams.sampler.ambientMix", "synthParams.sampler.gateWidth",
+    "samplerParams.chop", "samplerParams.raster", "samplerParams.gateActive", "samplerParams.gateRate",
     "fx.delay.time", "fx.delay.return", "fx.delay.on", "fx.delay.synced",
     "fx.reverb.size", "fx.reverb.return", "fx.reverb.on",
     "fx.fuzz.drive", "fx.fuzz.tone", "fx.fuzz.return", "fx.fuzz.on",
