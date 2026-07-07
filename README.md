@@ -1,8 +1,48 @@
 # SAL BAN Monolith Engine - Model Context Protocol (MCP) Server
 
-This is the official Model Context Protocol (MCP) server for the [SAL BAN Monolith Engine](https://salban.de), a powerful in-browser synthesizer and groovebox. 
+This is the official Model Context Protocol (MCP) server for the [SAL BAN Monolith Engine](https://salban.de), a powerful, cutting-edge in-browser synthesizer and groovebox. 
 
 This MCP server acts as a local WebSocket bridge, allowing agentic AI coding assistants (such as Claude Desktop, Cursor, or Antigravity) to directly program sequences, tweak synthesizer parameters, load audio samples, and interact with the Monolith Engine in real-time.
+
+![SAL BAN Monolith Engine](assets/monolith_engine.png)
+
+---
+
+## 📐 Architecture & Data Flow
+
+The integration runs entirely on the user's local machine, establishing a secure loopback connection between the browser, the sandboxed Docker container, and the AI client.
+
+```mermaid
+graph TD
+    subgraph Browser ["Web Browser (User's System)"]
+        Site["https://salban.de (Monolith Engine)"]
+        JS["Web Audio API & Sequencer UI"]
+    end
+
+    subgraph local_mcp ["Local Docker Sandbox (USER node)"]
+        WS["WebSocket Server (port 8080)"]
+        Verify["Strict verifyClient: Origin Check / Max Conn Limit / Optional Token"]
+    end
+
+    subgraph LLM_Client ["AI Client (e.g. Claude Desktop, Cursor)"]
+        Agent["LLM Coding Assistant"]
+        Stdio["Stdio Transport Connection"]
+    end
+
+    %% Data Flow Connections
+    Site <-->|WS Local Loopback: localhost:8080| Verify
+    Verify <-->|Secure Channel| WS
+    WS <-->|JSON-RPC via Stdio| Stdio
+    Stdio <-->|Tools Interface| Agent
+    
+    %% Styling
+    classDef browser fill:#051d36,stroke:#00e5ff,stroke-width:2px,color:#fff;
+    classDef docker fill:#1f2937,stroke:#00e5ff,stroke-width:2px,color:#fff;
+    classDef client fill:#111827,stroke:#00e5ff,stroke-width:2px,color:#fff;
+    class Browser browser;
+    class local_mcp docker;
+    class LLM_Client client;
+```
 
 ---
 
@@ -10,13 +50,31 @@ This MCP server acts as a local WebSocket bridge, allowing agentic AI coding ass
 
 Because the MCP server runs locally and connects to a public web interface, it is built with strict security measures to protect end-users:
 
-1. **Docker Sandbox:** The server runs inside an unprivileged environment (`USER node`) instead of root. Compiled files inside `/app` are set to read-only (`755` owned by `root:root`) to prevent post-exploitation modification.
+1. **Docker Sandbox:** The server runs inside an unprivileged environment (`USER node`) instead of root. Compiled files inside `/app` are set to read-only (`755` owned by `root:root`) to prevent post-exploitation modification of execution binaries.
 2. **Strict Origin Validation:** The WebSocket server strictly validates HTTP `Origin` headers, allowing connections **only** from `https://salban.de` and authorized local development hosts (e.g. `localhost:3000`). All other connection attempts (e.g., malicious background tabs) are rejected immediately with a `403 Forbidden` response.
 3. **Connection Rate Limiting:** Limits connections to a maximum of 2 concurrent active WebSocket sockets to prevent denial-of-service (DoS) exploits.
 4. **Payload Size Restriction:** Limits incoming frame sizes strictly to 15MB.
 5. **Flexible Token Protection (Pro-Mode):** 
    - By default, it operates in a **Hybrid No-Token Mode** for a frictionless out-of-the-box experience.
    - For maximum security (e.g. preventing unauthorized local host scripts from accessing the bridge), you can activate **Token Pro-Mode** by setting the `SALBAN_MCP_TOKEN` environment variable. When set, clients must pass this token during the WebSocket handshake.
+
+---
+
+## ⚖️ GDPR (DSGVO) & EU AI Act Compliance
+
+This project is built from the ground up to respect user privacy and comply with European regulatory frameworks.
+
+### 🇪🇺 GDPR / DSGVO Compliance (Privacy by Design - Art. 25)
+
+* **No Processing of Personal Data (PII):** The MCP server processes only technical telemetry and synthesis variables (tempo, notes, pitches, mute states, envelope parameters). It does not collect, log, or transmit personal data such as names, emails, IPs, or location telemetry.
+* **100% Local Loopback (Art. 32 Security):** All communication occurs locally. No audio parameters or command payloads are sent to external servers or third parties.
+* **Strict Necessity (Exemption from Cookie Banner):** The local token and configuration details stored in the browser's `localStorage` are technically necessary to establish and secure the local loopback WebSocket connection requested by the user, making it fully exempt from prior cookie consent requirements under ePrivacy guidelines.
+
+### 🤖 EU AI Act Compliance
+
+* **Low-Risk Classification:** This application acts as a creative assistant for music generation. It does not fall under the "High-Risk" categories (such as critical infrastructure, education, law enforcement, or biometrics) outlined in Annex III of the EU AI Act.
+* **Transparency Requirement (Art. 52):** When using an AI co-producer via this MCP bridge, the user initiates all actions. There is complete transparency that an artificial intelligence model is generating the notes/sequences.
+* **Human-in-the-Loop (HITL):** The user remains in complete control. All sequences generated by the AI can be edited, mutated, or muted in real-time via the web interface.
 
 ---
 
@@ -89,9 +147,9 @@ The server exposes 12 rich semantic tools to the AI assistant:
 * **`salban_set_pad_sequence`**: Sets triggers, pitch, reverse, and volume for a sampler pad's 16 steps.
 * **`salban_set_drum_sequence`**: Sets kick/snare/hat 16-step velocity triggers.
 * **`salban_set_synth_sequence`**: Sets note values, ties, and accents for bass/lead sequences.
-* **`salban_set_voice_params`**: Sets loop length, speed, direction, and transposition.
-* **`salban_clear_sequence`**: Silences a voice sequence.
-* **`salban_get_parameter_schema`**: Returns all tweakable parameters and LFO targets.
+* **`salban_set_voice_params`**: Sets loop length, speed, and direction.
+* **`salban_clear_sequence`**: Silences all 16 steps of a voice.
+* **`salban_get_parameter_schema`**: Returns valid tweakable parameters and LFO targets.
 
 ---
 
