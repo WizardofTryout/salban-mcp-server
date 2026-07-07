@@ -287,20 +287,26 @@ server.tool(
 
     // Mirror the dotted-path mutation into the server-side cache so that
     // salban_get_preset / salban_get_sequence immediately reflect the change.
+    let cacheUpdated = false;
     if (currentPresetState) {
       try {
         setNestedPath(currentPresetState, path, value);
+        cacheUpdated = true;
       } catch (e: any) {
         // Non-fatal: cache mutation failed (e.g. path not found), browser still received the update.
         console.error(`[tweak_parameter] Could not update cache for path "${path}":`, e.message);
       }
     }
 
+    const cacheNote = cacheUpdated
+      ? "Server-side cache updated."
+      : `Warning: server-side cache could not be updated for this path (path not found in cached preset) — salban_get_preset may return stale data for this field until the browser syncs again.`;
+
     return {
       content: [
         {
           type: "text",
-          text: `Successfully sent parameter tweak '${path}' = '${value}' to ${sentCount} connected client(s). Server-side cache updated.`
+          text: `Successfully sent parameter tweak '${path}' = '${value}' to ${sentCount} connected client(s). ${cacheNote}`
         }
       ]
     };
