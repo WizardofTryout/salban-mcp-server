@@ -35,10 +35,10 @@ if (securityToken) {
 // Local in-memory cache to store the latest preset state from the browser client
 let currentPresetState: any = null;
 
-// Initialize WebSocket Server with 15MB payload limit and strict client verification
+// Initialize WebSocket Server with 50MB payload limit and strict client verification
 const wss = new WebSocketServer({
   port: WS_PORT,
-  maxPayload: 15 * 1024 * 1024, // 15MB payload size limit
+  maxPayload: 50 * 1024 * 1024, // 50MB payload size limit
   verifyClient: (
     info: { origin: string; req: IncomingMessage; secure: boolean },
     callback: (res: boolean, code?: number, message?: string) => void
@@ -101,8 +101,8 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
   ws.on("message", (message: string) => {
     try {
       // Ensure the received message size does not exceed the limit
-      if (message.length > 15 * 1024 * 1024) {
-        console.error("[WS Security] Received message exceeds 15MB limit. Terminating connection.");
+      if (message.length > 50 * 1024 * 1024) {
+        console.error("[WS Security] Received message exceeds 50MB limit. Terminating connection.");
         ws.terminate();
         return;
       }
@@ -129,7 +129,13 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 
       // Standard message processing (preset updates / states)
       if (data && (data.type === "state_sync" || data.type === "preset_changed")) {
-        currentPresetState = data.preset;
+        if (data.preset) {
+          // If the incoming preset doesn't have samples, but we already have samples in cache, merge them!
+          if (!data.preset.samples && currentPresetState && currentPresetState.samples) {
+            data.preset.samples = currentPresetState.samples;
+          }
+          currentPresetState = data.preset;
+        }
         console.error("[WS] Cached preset updated from browser client");
       }
 
@@ -165,8 +171,10 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 server.tool(
   "salban_get_preset",
   "Returns the currently active cached preset from the browser client. If no browser is connected or synced, it returns a descriptive error message.",
-  {},
-  async () => {
+  {
+    includeSamples: z.boolean().optional().describe("If true, includes full base64 sample data in the preset object. If false (default), strips/omits base64 sample data to reduce payload size.")
+  },
+  async ({ includeSamples = false }: { includeSamples?: boolean }) => {
     if (wss.clients.size === 0) {
       return {
         content: [
@@ -190,11 +198,38 @@ server.tool(
       };
     }
 
+    let returnedPreset = JSON.parse(JSON.stringify(currentPresetState));
+    if (!includeSamples && returnedPreset.samples) {
+      if (returnedPreset.samples.pads) {
+        for (const padKey in returnedPreset.samples.pads) {
+          const pad = returnedPreset.samples.pads[padKey];
+          if (pad && pad.data) {
+            const sizeKB = Math.round((pad.data.length * 0.75) / 1024);
+            returnedPreset.samples.pads[padKey] = {
+              hasSample: true,
+              name: pad.name,
+              sizeKB,
+              trimStart: pad.trimStart,
+              trimEnd: pad.trimEnd
+            };
+          }
+        }
+      }
+      if (returnedPreset.samples.phraseSampler && returnedPreset.samples.phraseSampler.data) {
+        const sizeKB = Math.round((returnedPreset.samples.phraseSampler.data.length * 0.75) / 1024);
+        returnedPreset.samples.phraseSampler = {
+          hasSample: true,
+          name: returnedPreset.samples.phraseSampler.name,
+          sizeKB
+        };
+      }
+    }
+
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify(currentPresetState, null, 2)
+          text: JSON.stringify(returnedPreset, null, 2)
         }
       ]
     };
@@ -226,6 +261,20 @@ server.tool(
       type: "apply_preset",
       preset
     });
+
+    const payloadSize = Buffer.byteLength(payload, 'utf8');
+    const MAX_SIZE = 50 * 1024 * 1024; // 50MB limit
+    if (payloadSize > MAX_SIZE) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: The preset size (${(payloadSize / 1024 / 1024).toFixed(2)} MB) exceeds the maximum allowed payload size of 50 MB. Make sure samples are trimmed or simplified.`
+          }
+        ],
+        isError: true
+      };
+    }
 
     let sentCount = 0;
     wss.clients.forEach((client: WebSocket) => {
