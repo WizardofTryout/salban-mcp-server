@@ -194,15 +194,17 @@ Add the following entry (adjusting the paths or command if running via Docker):
 
 ## 📡 Registered MCP Tools
 
-The server exposes 12 rich semantic tools to the AI assistant:
+The server exposes 14 rich semantic tools to the AI assistant:
 
 * **`salban_get_preset`**: Returns the active preset JSON state from the browser client.
 * **`salban_apply_preset`**: Sends a complete preset JSON configuration to the browser.
 * **`salban_tweak_parameter`**: Tweaks a single nested parameter (e.g., `synthParams.lead.cutoff`).
 * **`salban_load_sample`**: Injects a Base64-encoded audio sample into a sampler pad (0–7).
+* **`salban_load_phrase`**: Loads a Base64-encoded audio loop directly into the central Phrase Sampler.
 * **`salban_inject_mcp_sample`**: Programmatically synthesizes standard electronic drum hits (kick, noise click) and injects them.
 * **`salban_get_sequence`**: Returns the 16-step sequence for a specific voice.
 * **`salban_set_pad_sequence`**: Sets triggers, pitch, reverse, and volume for a sampler pad's 16 steps.
+* **`salban_set_sampler_sequence`**: Sets triggers, pitch, reverse, volume, and tie (sustain) for the Phrase Sampler's 16 steps.
 * **`salban_set_drum_sequence`**: Sets kick/snare/hat 16-step velocity triggers.
 * **`salban_set_synth_sequence`**: Sets note values, ties, and accents for bass/lead sequences.
 * **`salban_set_voice_params`**: Sets loop length, speed, and direction.
