@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "salban-monolith": {
+      "command": "node",
+      "args": [
+        "YOUR_LOCAL_PATH_TO/salban-mcp-server/build/index.js"
+      ]
+    }
+  }
+}

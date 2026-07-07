@@ -1,0 +1,22 @@
+{
+  "name": "salban-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP Server with WebSocket Bridge for SAL BAN Monolith Engine",
+  "main": "build/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.1",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.5.2"
+  }
+}
