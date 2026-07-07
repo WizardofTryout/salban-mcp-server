@@ -4,7 +4,10 @@ This is the official Model Context Protocol (MCP) server for the [SAL BAN Monoli
 
 This MCP server acts as a local WebSocket bridge, allowing agentic AI coding assistants (such as Claude Desktop, Cursor, or Antigravity) to directly program sequences, tweak synthesizer parameters, load audio samples, and interact with the Monolith Engine in real-time.
 
-![SAL BAN Monolith Engine](assets/monolith_engine.png)
+<p align="center">
+  <img src="assets/salban-monolith-engine-dark.png" alt="SAL BAN Monolith Engine - Dark Mode" width="48%" />
+  <img src="assets/salban-monolith-engine-light.png" alt="SAL BAN Monolith Engine - Light Mode" width="48%" />
+</p>
 
 ---
 
