@@ -235,11 +235,15 @@ server.tool(
       }
     });
 
+    // Update server-side cache immediately so salban_get_preset reflects the change
+    // without waiting for the browser to send a state_sync message.
+    currentPresetState = JSON.parse(JSON.stringify(preset));
+
     return {
       content: [
         {
           type: "text",
-          text: `Successfully broadcasted preset to ${sentCount} connected browser client(s).`
+          text: `Successfully broadcasted preset to ${sentCount} connected browser client(s). Server-side cache updated.`
         }
       ]
     };
@@ -281,11 +285,22 @@ server.tool(
       }
     });
 
+    // Mirror the dotted-path mutation into the server-side cache so that
+    // salban_get_preset / salban_get_sequence immediately reflect the change.
+    if (currentPresetState) {
+      try {
+        setNestedPath(currentPresetState, path, value);
+      } catch (e: any) {
+        // Non-fatal: cache mutation failed (e.g. path not found), browser still received the update.
+        console.error(`[tweak_parameter] Could not update cache for path "${path}":`, e.message);
+      }
+    }
+
     return {
       content: [
         {
           type: "text",
-          text: `Successfully sent parameter tweak request for '${path}' to '${value}' to ${sentCount} connected client(s).`
+          text: `Successfully sent parameter tweak '${path}' = '${value}' to ${sentCount} connected client(s). Server-side cache updated.`
         }
       ]
     };
@@ -338,7 +353,7 @@ server.tool(
   }
 );
 
-// Tool 13: Inject Base64 audio sample directly into the central Phrase Sampler
+// Tool 5: Inject Base64 audio sample directly into the central Phrase Sampler
 server.tool(
   "salban_load_phrase",
   "Loads a Base64 encoded audio sample (WAV, MP3, etc.) directly into the central Phrase Sampler of the Monolith Engine.",
@@ -384,7 +399,7 @@ server.tool(
   }
 );
 
-// Tool 5: Synthesize and inject a programmatically generated sample
+// Tool 6: Synthesize and inject a programmatically generated sample
 server.tool(
   "salban_inject_mcp_sample",
   "Generates an analytical synthesizer hit (like an 808 kick, white noise sweep, or metallic click) programmatically in Node.js, packages it as a valid WAV, converts to Base64, and injects it into a specified sampler pad (0-7).",
@@ -527,6 +542,25 @@ function broadcastToClients(payload: object): number {
   return count;
 }
 
+/**
+ * Apply a dotted-path (and bracket-notation) mutation to an object in-place.
+ * Supports paths like "synthParams.lead.cutoff" and "lfos[0].amount".
+ */
+function setNestedPath(obj: any, path: string, value: any): void {
+  // Normalise bracket notation: lfos[0].amount → lfos.0.amount
+  const normalised = path.replace(/\[(\d+)\]/g, '.$1');
+  const parts = normalised.split('.');
+  let cursor = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i];
+    if (cursor[key] === undefined || cursor[key] === null) {
+      throw new Error(`Path segment "${key}" not found`);
+    }
+    cursor = cursor[key];
+  }
+  cursor[parts[parts.length - 1]] = value;
+}
+
 /** Guard: returns an error result if no preset is cached or no client is connected. */
 function requirePreset(): { ok: false; result: any } | { ok: true } {
   if (wss.clients.size === 0) {
@@ -552,7 +586,7 @@ type SynthVoice = typeof SYNTH_VOICES[number];
 
 // ─── GRANULAR SEQUENCER TOOLS ───────────────────────────────────────────────
 
-// Tool 6: Read a single voice sequence without loading the full preset
+// Tool 7: Read a single voice sequence without loading the full preset
 server.tool(
   "salban_get_sequence",
   "Returns only the 16-step sequence for one voice (kick, snare, hat, bass, lead, sampler, pad0–pad7). Much faster than salban_get_preset because it returns only the relevant array.",
@@ -585,7 +619,7 @@ server.tool(
   }
 );
 
-// Tool 7: Set 16 steps for a single sampler pad
+// Tool 8: Set 16 steps for a single sampler pad
 server.tool(
   "salban_set_pad_sequence",
   "Sets the 16-step sequence for one sampler pad (pad0–pad7). Mutates only that pad's pattern in the cached preset and sends it to the browser instantly.",
@@ -615,7 +649,7 @@ server.tool(
   }
 );
 
-// Tool 14: Set 16 steps for the Phrase Sampler (sampler)
+// Tool 9: Set 16 steps for the Phrase Sampler (sampler)
 server.tool(
   "salban_set_sampler_sequence",
   "Sets the 16-step sequence for the Phrase Sampler. Each step has active, pitch, reverse, tie, and vol.",
@@ -645,7 +679,7 @@ server.tool(
   }
 );
 
-// Tool 8: Set 16 steps for a drum voice (kick / snare / hat)
+// Tool 10: Set 16 steps for a drum voice (kick / snare / hat)
 server.tool(
   "salban_set_drum_sequence",
   "Sets the 16-step integer pattern for kick, snare, or hat. 0 = off, 1 = normal hit, 2 = accent. (Snare also supports 3 = ghost hit.)",
@@ -666,7 +700,7 @@ server.tool(
   }
 );
 
-// Tool 9: Set 16 steps for a synth voice (bass / lead)
+// Tool 11: Set 16 steps for a synth voice (bass / lead)
 server.tool(
   "salban_set_synth_sequence",
   "Sets the 16-step note sequence for bass or lead. Each step has active, note (e.g. 'D2'), tie, and accent.",
@@ -692,12 +726,16 @@ server.tool(
   }
 );
 
-// Tool 10: Set playback parameters for any voice
+// Tool 12: Set playback parameters for any voice
+// Note: "sampler" is a valid voice ID — the Phrase Sampler has its own loop length, speed,
+// and direction controls in voiceState on the frontend (preset.voices.sampler).
+// Fine-grained sampler FX (cutoff, stutter, etc.) are controlled via salban_tweak_parameter
+// using samplerParams.* and synthParams.sampler.* paths.
 server.tool(
   "salban_set_voice_params",
   "Sets playback parameters (loop length, speed, direction, transpose) for any voice. All fields are optional — only provided fields are changed.",
   {
-    voice: z.string().describe("Voice ID: bass | lead | kick | snare | hat | pad0–pad7"),
+    voice: z.string().describe("Voice ID: bass | lead | kick | snare | hat | sampler | pad0–pad7"),
     loopLength: z.number().int().min(1).max(16).optional().describe("Active step count 1–16"),
     speed: z.enum(["1/4x", "1/2x", "1x", "2x", "4x"]).optional().describe("Playback speed multiplier"),
     dir: z.enum(["forward", "reverse", "pingpong", "random"]).optional().describe("Playback direction"),
@@ -730,7 +768,7 @@ server.tool(
   }
 );
 
-// Tool 11: Clear (silence) all steps of a voice
+// Tool 13: Clear (silence) all steps of a voice
 server.tool(
   "salban_clear_sequence",
   "Silences all 16 steps of a voice in one call. Drum voices are set to 0 (off); synth voices have active=false; pad and sampler sequences have active=false.",
@@ -801,7 +839,7 @@ const SCHEMA_INFO = {
   ]
 };
 
-// Tool 12: Get parameter schemas and valid LFO targets
+// Tool 14: Get parameter schemas and valid LFO targets
 server.tool(
   "salban_get_parameter_schema",
   "Returns a list of all valid parameters that can be tweaked using salban_tweak_parameter (dotted keypaths), plus all allowed targets for LFO modulations.",
