@@ -34,6 +34,7 @@ if (securityToken) {
 
 // Local in-memory cache to store the latest preset state from the browser client
 let currentPresetState: any = null;
+let currentSongSequencerState: any = null;
 
 // Initialize WebSocket Server with 50MB payload limit and strict client verification
 const wss = new WebSocketServer({
@@ -136,11 +137,23 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
           }
           currentPresetState = data.preset;
         }
-        console.error("[WS] Cached preset updated from browser client");
+        if (data.songSequencer) {
+          currentSongSequencerState = data.songSequencer;
+        }
+        console.error("[WS] Cached preset and song sequencer updated from browser client");
       }
 
       // Broadcast control messages from other clients (e.g. scripts/AI) to all other clients (e.g. browser)
-      if (data && (data.type === "load_phrase" || data.type === "load_sample" || data.type === "apply_preset" || data.type === "tweak_parameter")) {
+      if (data && (
+        data.type === "load_phrase" ||
+        data.type === "load_sample" ||
+        data.type === "apply_preset" ||
+        data.type === "tweak_parameter" ||
+        data.type === "configure_song_pad" ||
+        data.type === "clear_song_pad" ||
+        data.type === "configure_song_sequencer" ||
+        data.type === "trigger_song_pad"
+      )) {
         console.error(`[WS] Received broadcast request for type "${data.type}"`);
         const textMessage = message.toString();
         wss.clients.forEach((client: WebSocket) => {
@@ -907,6 +920,155 @@ server.tool(
           text: JSON.stringify(SCHEMA_INFO, null, 2)
         }
       ]
+    };
+  }
+);
+
+// Tool 15: Get active Song Preset Sequencer state
+server.tool(
+  "salban_get_song_sequencer",
+  "Returns the currently active cached state of the Song Preset Sequencer from the browser client (active pads, assigned preset names, repeat counts, active pad index, play direction, and auto-chain status).",
+  {},
+  async () => {
+    if (wss.clients.size === 0) {
+      return {
+        content: [{ type: "text", text: "Error: No browser client is currently connected. Make sure you open salban.de in a local web browser, and verify that the local WebSocket bridge is running." }],
+        isError: true
+      };
+    }
+    if (!currentSongSequencerState) {
+      return {
+        content: [{ type: "text", text: "Notice: The browser client is connected, but no song sequencer state has been synchronized yet. Please interact with the song sequencer (e.g. adjust a repeat count or rename a pad) to trigger a synchronization." }]
+      };
+    }
+    return {
+      content: [{ type: "text", text: JSON.stringify(currentSongSequencerState, null, 2) }]
+    };
+  }
+);
+
+// Tool 16: Configure a pad in the Song Preset Sequencer
+server.tool(
+  "salban_configure_song_pad",
+  "Configures a specific pad in the Song Preset Sequencer. You can assign a new name, adjust its repeat count, capture the current live state of the groovebox, or directly load a specific preset state onto the pad.",
+  {
+    padId: z.number().min(0).max(7).describe("The ID of the pad to configure (0-7)."),
+    name: z.string().optional().describe("Optional new custom name/label for the pad."),
+    repeatCount: z.number().min(1).max(99).optional().describe("Optional repeat count (1 to 99) for this pad."),
+    captureLiveState: z.boolean().optional().describe("If true, captures the currently running live settings of the groovebox into this pad."),
+    preset: z.any().optional().describe("Optional full preset state JSON object to load onto this pad.")
+  },
+  async ({ padId, name, repeatCount, captureLiveState, preset }) => {
+    if (wss.clients.size === 0) {
+      return {
+        content: [{ type: "text", text: "Error: No browser client is currently connected." }],
+        isError: true
+      };
+    }
+    const message = {
+      type: "configure_song_pad",
+      padId,
+      name,
+      repeatCount,
+      captureLiveState,
+      preset
+    };
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify(message));
+      }
+    });
+    return {
+      content: [{ type: "text", text: `Success: Configuration command for Pad ${padId + 1} sent to browser.` }]
+    };
+  }
+);
+
+// Tool 17: Clear a pad in the Song Preset Sequencer
+server.tool(
+  "salban_clear_song_pad",
+  "Clears a preset slot in the Song Preset Sequencer, resetting its name, repeat count, and removing the assigned preset.",
+  {
+    padId: z.number().min(0).max(7).describe("The ID of the pad to clear (0-7).")
+  },
+  async ({ padId }) => {
+    if (wss.clients.size === 0) {
+      return {
+        content: [{ type: "text", text: "Error: No browser client is currently connected." }],
+        isError: true
+      };
+    }
+    const message = {
+      type: "clear_song_pad",
+      padId
+    };
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify(message));
+      }
+    });
+    return {
+      content: [{ type: "text", text: `Success: Clear command for Pad ${padId + 1} sent to browser.` }]
+    };
+  }
+);
+
+// Tool 18: Configure global parameters of the Song Preset Sequencer
+server.tool(
+  "salban_configure_song_sequencer",
+  "Updates global settings of the Song Preset Sequencer, such as enabling/disabling Auto-Chain mode or setting the play direction.",
+  {
+    autoChainEnabled: z.boolean().optional().describe("Toggle Auto-Chain mode."),
+    chainDirection: z.enum(["fwd", "rev", "pp", "rnd"]).optional().describe("Set play direction order: 'fwd' (forward), 'rev' (reverse), 'pp' (ping-pong), or 'rnd' (random).")
+  },
+  async ({ autoChainEnabled, chainDirection }) => {
+    if (wss.clients.size === 0) {
+      return {
+        content: [{ type: "text", text: "Error: No browser client is currently connected." }],
+        isError: true
+      };
+    }
+    const message = {
+      type: "configure_song_sequencer",
+      autoChainEnabled,
+      chainDirection
+    };
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify(message));
+      }
+    });
+    return {
+      content: [{ type: "text", text: `Success: Song sequencer global parameters updated.` }]
+    };
+  }
+);
+
+// Tool 19: Trigger a song pad to play or queue
+server.tool(
+  "salban_trigger_song_pad",
+  "Triggers playback of a specific pad in the Song Preset Sequencer immediately, or queues it for the next bar boundary if the sequencer is already running.",
+  {
+    padId: z.number().min(0).max(7).describe("The ID of the pad to trigger (0-7).")
+  },
+  async ({ padId }) => {
+    if (wss.clients.size === 0) {
+      return {
+        content: [{ type: "text", text: "Error: No browser client is currently connected." }],
+        isError: true
+      };
+    }
+    const message = {
+      type: "trigger_song_pad",
+      padId
+    };
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify(message));
+      }
+    });
+    return {
+      content: [{ type: "text", text: `Success: Trigger command for Pad ${padId + 1} sent to browser.` }]
     };
   }
 );

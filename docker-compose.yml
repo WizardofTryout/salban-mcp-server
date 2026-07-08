@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  salban-mcp:
+    build: .
+    container_name: salban-mcp
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    # environment:
+      # Optional: Set a secret token to protect the WebSocket connection.
+      # If set, the browser client must pass ?token=YOUR_TOKEN when connecting.
+      # Leave commented out to run in open (no-auth) mode for local use.
+      # - SALBAN_MCP_TOKEN=your_secret_token_here
+
+      # Optional: Restrict allowed WebSocket origins (comma-separated).
+      # Defaults to salban.de + localhost variants if not set.
+      # - ALLOWED_ORIGINS=https://salban.de,http://localhost:3000
