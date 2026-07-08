@@ -194,7 +194,7 @@ Add the following entry (adjusting the paths or command if running via Docker):
 
 ## 📡 Registered MCP Tools
 
-The server exposes 14 rich semantic tools to the AI assistant:
+The server exposes 19 rich semantic tools to the AI assistant:
 
 * **`salban_get_preset`**: Returns the active preset JSON state from the browser client.
 * **`salban_apply_preset`**: Sends a complete preset JSON configuration to the browser.
@@ -210,6 +210,11 @@ The server exposes 14 rich semantic tools to the AI assistant:
 * **`salban_set_voice_params`**: Sets loop length, speed, and direction.
 * **`salban_clear_sequence`**: Silences all 16 steps of a voice.
 * **`salban_get_parameter_schema`**: Returns valid tweakable parameters and LFO targets.
+* **`salban_get_song_sequencer`**: Returns the active Song Preset Sequencer state (pads, names, repeats, play direction, and auto-chain status).
+* **`salban_configure_song_pad`**: Configures a specific pad (0–7), allowing name assignment, repeat count modification, capturing the current live state, or direct preset snapshot uploading.
+* **`salban_clear_song_pad`**: Resets and clears a pad slot, removing the assigned preset snapshot.
+* **`salban_configure_song_sequencer`**: Updates global song sequencer parameters (toggling Auto-Chain mode and setting play direction like forward, reverse, ping-pong, or random).
+* **`salban_trigger_song_pad`**: Triggers or queues playback of a specific pad in the Song Preset Sequencer immediately or at the next loop boundary.
 
 ---
 

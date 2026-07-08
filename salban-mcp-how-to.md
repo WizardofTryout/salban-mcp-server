@@ -75,12 +75,13 @@ Aus Sicherheitsgründen schränkt der Browser (insb. Brave/Chrome) Zugriffe von 
 
 ## 🛠️ 5. Registrierte MCP Tools
 
-Der Server stellt der KI nun insgesamt **11 Werkzeuge** zur Verfügung (definiert in [src/index.ts](file:///Volumes/Spacestation/virtual-buddy-exchange/Tools-Development/projects/salban.de/mcp-server/salban-mcp-server/src/index.ts)), unterteilt in drei Kategorien:
+Der Server stellt der KI nun insgesamt **19 Werkzeuge** zur Verfügung (definiert in [src/index.ts](file:///Volumes/Spacestation/virtual-buddy-exchange/Tools-Development/projects/salban.de/mcp-server/salban-mcp-server/src/index.ts)), unterteilt in vier Kategorien:
 
 ### 🎛️ Preset- & Parameter-Steuerung
 1. **`salban_get_preset`**
    * **Beschreibung:** Gibt das aktuell im Browser geladene Synthesizer-Preset als JSON-Objekt zurück.
-   * **Argumente:** Keine.
+   * **Argumente:**
+     - `includeSamples`: (optional, Boolean) Ob Base64-Audiosamples mitgeliefert werden sollen.
 2. **`salban_apply_preset`**
    * **Beschreibung:** Überschreibt das gesamte Preset im Browser mit neuen Notenwerten, Tempi, Modulationszielen oder Effekten.
    * **Argumente:** 
@@ -90,14 +91,22 @@ Der Server stellt der KI nun insgesamt **11 Werkzeuge** zur Verfügung (definier
    * **Argumente:**
      - `path`: Dotted-Notations-Pfad zum Parameter (z. B. `synthParams.lead.cutoff`, `mixer.kick.mute`).
      - `value`: Der neue Wert.
+4. **`salban_get_parameter_schema`**
+   * **Beschreibung:** Liefert eine Liste aller über `salban_tweak_parameter` regelbaren Dotted-Keypaths sowie alle zulässigen LFO-Modulationsziele.
+   * **Argumente:** Keine.
 
 ### 🔊 Sampler- & Sample-Injektion
-4. **`salban_load_sample`**
+5. **`salban_load_sample`**
    * **Beschreibung:** Lädt ein beliebiges Base64-codiertes Audio-Sample (WAV, MP3, etc.) direkt auf eines der 8 Pads.
    * **Argumente:**
      - `padIndex`: Target Sampler Pad (0 bis 7).
      - `data`: Der Base64-String der Audio-Datei.
-5. **`salban_inject_mcp_sample`**
+6. **`salban_load_phrase`**
+   * **Beschreibung:** Lädt ein Base64-codiertes Audio-Sample direkt in den zentralen Phrase Sampler.
+   * **Argumente:**
+     - `data`: Der Base64-String der Audio-Datei.
+     - `name`: (optional) Name des Phrase-Loops.
+7. **`salban_inject_mcp_sample`**
    * **Beschreibung:** Synthetisiert programmatisch in Node.js ein Audio-Sample (Kick, Noise-Sweep, Click), erzeugt eine 16-Bit-Mono-WAV in-memory und sendet diese via Base64 an das angegebene Pad.
    * **Argumente:**
      - `padIndex`: Target Sampler Pad (0 bis 7).
@@ -106,26 +115,30 @@ Der Server stellt der KI nun insgesamt **11 Werkzeuge** zur Verfügung (definier
 ### 🥁 Granulare Sequenzer-Steuerung (Latenzfreie Ausführung)
 *Hinweis: Diese Tools mutieren den lokalen Preset-Cache des Servers und flushen diesen sofort an den Browser. Dadurch entfällt der 2-3 minütige Ladezyklus des gesamten Presets, Änderungen sind in <100ms hörbar.*
 
-6. **`salban_get_sequence`**
+8. **`salban_get_sequence`**
    * **Beschreibung:** Gibt das 16-Schritte-Array für eine einzelne Spur zurück.
    * **Argumente:**
      - `voice`: `"kick"`, `"snare"`, `"hat"`, `"bass"`, `"lead"`, oder `"pad0"` bis `"pad7"`.
-7. **`salban_set_pad_sequence`**
+9. **`salban_set_pad_sequence`**
    * **Beschreibung:** Setzt das 16-Schritte-Muster für ein einzelnes Sampler-Pad.
    * **Argumente:**
      - `padIndex`: Index des Pads (0 bis 7).
      - `steps`: Array mit 16 Objekten der Form: `{ active: boolean, pitch: number, reverse: boolean, vol: number }`.
-8. **`salban_set_drum_sequence`**
-   * **Beschreibung:** Programmiert ein 16-Schritte-Muster für klassische Drum-Instrumente.
-   * **Argumente:**
-     - `voice`: `"kick"`, `"snare"`, oder `"hat"`.
-     - `steps`: Array von 16 Zahlen (`0` = aus, `1` = Hit, `2` = Accent, `3` = Snare Ghost-Hit).
-9. **`salban_set_synth_sequence`**
-   * **Beschreibung:** Programmiert Noten und Binde-Bögen für die Bassline- oder Lead-Synthesizer.
-   * **Argumente:**
-     - `voice`: `"bass"` oder `"lead"`.
-     - `steps`: Array von 16 Objekten der Form: `{ active: boolean, note: string, tie: boolean, accent: boolean }`.
-10. **`salban_set_voice_params`**
+10. **`salban_set_sampler_sequence`**
+    * **Beschreibung:** Setzt das 16-Schritte-Muster für den zentralen Phrase Sampler (Triggers, Pitch, Reverse, Vol, Tie).
+    * **Argumente:**
+      - `steps`: Array von 16 Objekten der Form: `{ active: boolean, pitch: number, reverse: boolean, vol: number, tie: boolean }`.
+11. **`salban_set_drum_sequence`**
+    * **Beschreibung:** Programmiert ein 16-Schritte-Muster für klassische Drum-Instrumente.
+    * **Argumente:**
+      - `voice`: `"kick"`, `"snare"`, oder `"hat"`.
+      - `steps`: Array von 16 Zahlen (`0` = aus, `1` = Hit, `2` = Accent, `3` = Snare Ghost-Hit).
+12. **`salban_set_synth_sequence`**
+    * **Beschreibung:** Programmiert Noten und Binde-Bögen für die Bassline- oder Lead-Synthesizer.
+    * **Argumente:**
+      - `voice`: `"bass"` oder `"lead"`.
+      - `steps`: Array von 16 Objekten der Form: `{ active: boolean, note: string, tie: boolean, accent: boolean }`.
+13. **`salban_set_voice_params`**
     * **Beschreibung:** Ändert Wiedergabeparameter wie Loop-Länge, Abspielrichtung oder Geschwindigkeit.
     * **Argumente:**
       - `voice`: Die betroffene Spur (z. B. `"bass"`, `"pad0"`).
@@ -133,10 +146,36 @@ Der Server stellt der KI nun insgesamt **11 Werkzeuge** zur Verfügung (definier
       - `speed`: (optional) `"1/4x"`, `"1/2x"`, `"1x"`, `"2x"`, `"4x"`.
       - `dir`: (optional) `"forward"`, `"reverse"`, `"pingpong"`.
       - `transpose`: (optional, nur Synth) Transponierung in Halbtönen.
-11. **`salban_clear_sequence`**
+14. **`salban_clear_sequence`**
     * **Beschreibung:** Leert und deaktiviert alle 16 Schritte einer Spur in einem einzelnen Aufruf.
     * **Argumente:**
       - `voice`: Betroffene Spur (z. B. `"lead"`, `"pad4"`).
+
+### 🎵 Song- & Pad-Arrangement (Song Preset Sequencer)
+15. **`salban_get_song_sequencer`**
+    * **Beschreibung:** Gibt den aktuellen Zustand des Song Preset Sequenzers (Pads, Namen, Repeats, Play-Richtung, Auto-Chain-Status) zurück.
+    * **Argumente:** Keine.
+16. **`salban_configure_song_pad`**
+    * **Beschreibung:** Konfiguriert ein spezifisches Pad (0-7) im Song Preset Sequencer. Ermöglicht Namen zu vergeben, Repeats anzupassen, den aktuellen Live-Zustand des Synthesizers zu erfassen (Recapture) oder ein Preset direkt zu laden.
+    * **Argumente:**
+      - `padId`: Index des Pads (0 bis 7).
+      - `name`: (optional) Neuer Name für das Pad.
+      - `repeatCount`: (optional) Anzahl der Wiederholungen (1 bis 99).
+      - `captureLiveState`: (optional, Boolean) Erfasst den aktuellen Live-Zustand des Groovebox-Synthesizers.
+      - `preset`: (optional, Object) Ein vollständiges Preset-JSON-Objekt.
+17. **`salban_clear_song_pad`**
+    * **Beschreibung:** Löscht ein zugewiesenes Preset-Snapshot von einem spezifischen Pad und setzt den Slot zurück.
+    * **Argumente:**
+      - `padId`: Index des Pads (0 bis 7).
+18. **`salban_configure_song_sequencer`**
+    * **Beschreibung:** Aktualisiert globale Song-Sequenzer-Einstellungen (Auto-Chain an/aus, Abspielrichtung).
+    * **Argumente:**
+      - `autoChainEnabled`: (optional, Boolean) Schaltet Auto-Chain ein/aus.
+      - `chainDirection`: (optional) `"fwd"`, `"rev"`, `"pp"`, oder `"rnd"`.
+19. **`salban_trigger_song_pad`**
+    * **Beschreibung:** Startet die Wiedergabe eines bestimmten Pads (0 bis 7) sofort oder reiht es an der nächsten Taktgrenze ein.
+    * **Argumente:**
+      - `padId`: Index des Pads (0 bis 7).
 
 ---
 
