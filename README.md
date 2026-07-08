@@ -62,6 +62,19 @@ Traditional music software relies on complex MIDI mappings, local file transfers
       <img src="assets/011-sequencer.png" alt="Step Sequencer" />
     </td>
   </tr>
+  <tr>
+    <td width="50%">
+      <h4>🥁 One-Shot Sampler &amp; Editor</h4>
+      <p>An 8-pad <strong>One-Shot Sampler</strong> featuring custom sample recording, local file uploading, and a precision <strong>waveform editor</strong> to adjust pitch, reverse playback, volume, and trigger sequences.</p>
+      <img src="assets/One-Shot-Sampler.png" alt="One-Shot Sampler" style="margin-bottom: 8px;" />
+      <img src="assets/Sampler-Editor-one-shot.png" alt="Sampler Editor" />
+    </td>
+    <td width="50%">
+      <h4>🎼 Song Mode (Song Preset Sequencer)</h4>
+      <p>A multi-pad <strong>Song Preset Sequencer</strong> allowing users or the AI to capture live groove states, assign custom repeat counts, and automate structured song arrangements using <strong>Auto-Chain</strong> playback directions (Forward, Reverse, Ping-Pong, and Random).</p>
+      <img src="assets/Song-Preset-Sequencer.png" alt="Song Preset Sequencer" />
+    </td>
+  </tr>
 </table>
 
 ---
