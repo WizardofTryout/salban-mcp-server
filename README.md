@@ -75,6 +75,24 @@ Traditional music software relies on complex MIDI mappings, local file transfers
       <img src="assets/Song-Preset-Sequencer.png" alt="Song Preset Sequencer" />
     </td>
   </tr>
+  <tr>
+    <td width="50%">
+      <h4>🎹 Clip Launcher &amp; Piano Roll</h4>
+      <p>A full <strong>DAW-style Clip Launcher</strong> with 3 tracks × 5 scenes and a built-in <strong>Piano Roll</strong> for polyphonic MIDI note editing. Supports real-time recording in Overdub and Replace modes, chord input, note quantization, and clip length settings in bars and beats.</p>
+    </td>
+    <td width="50%">
+      <h4>🥁 Drum Auto-Tune</h4>
+      <p>Intelligent pitch-tracking for all drum voices: <strong>Kick</strong>, <strong>Snare</strong>, and <strong>Hat</strong> can automatically follow the pitch of the Bassline, Lead, or Morph32 sequences in real-time using a per-voice frequency folding formula (Snare: 10th overtone → 2000–5000 Hz).</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h4>🎛️ Morph32 Polyphonic Synthesizer</h4>
+      <p>An <strong>8-voice polyphonic synthesizer</strong> with dual oscillators (sawtooth, square, triangle, sine, noise, wavetable), a main resonant filter, a stereo dual-filter matrix with key-tracking and spacing modulation, full ADSR amplitude and filter envelopes, ring modulation, portamento, and a polyphonic step sequencer that supports chord input per step.</p>
+    </td>
+    <td width="50%">
+    </td>
+  </tr>
 </table>
 
 ---
@@ -207,27 +225,66 @@ Add the following entry (adjusting the paths or command if running via Docker):
 
 ## 📡 Registered MCP Tools
 
-The server exposes 19 rich semantic tools to the AI assistant:
+The server exposes **28 rich semantic tools** to the AI assistant, organized into six functional groups:
 
-* **`salban_get_preset`**: Returns the active preset JSON state from the browser client.
-* **`salban_apply_preset`**: Sends a complete preset JSON configuration to the browser.
-* **`salban_tweak_parameter`**: Tweaks a single nested parameter (e.g., `synthParams.lead.cutoff`).
+### 🗂️ Preset & Parameter Management
+
+* **`salban_get_preset`**: Returns the active preset JSON state from the browser client. Pass `includeSamples: true` to include full Base64 audio data.
+* **`salban_apply_preset`**: Sends a complete preset JSON configuration to the browser (up to 50 MB).
+* **`salban_tweak_parameter`**: Tweaks a single nested parameter (e.g., `synthParams.lead.cutoff`, `mixer.kick.mute`). Supports dotted-path and bracket notation.
+* **`salban_get_parameter_schema`**: Returns the full list of valid tweakable parameter paths and all allowed LFO modulation targets.
+
+### 🎙️ Sample & Phrase Injection
+
 * **`salban_load_sample`**: Injects a Base64-encoded audio sample into a sampler pad (0–7).
 * **`salban_load_phrase`**: Loads a Base64-encoded audio loop directly into the central Phrase Sampler.
-* **`salban_inject_mcp_sample`**: Programmatically synthesizes standard electronic drum hits (kick, noise click) and injects them.
-* **`salban_get_sequence`**: Returns the 16-step sequence for a specific voice.
+* **`salban_inject_mcp_sample`**: Programmatically synthesizes standard electronic drum hits (`kick`, `noise`, `sine_click`) in Node.js and injects them as WAV.
+
+### 🎼 Step Sequencer (16-Step Grid)
+
+* **`salban_get_sequence`**: Returns the 16-step sequence for a specific voice (`kick`, `snare`, `hat`, `bass`, `lead`, `sampler`, `pad0`–`pad7`).
+* **`salban_set_drum_sequence`**: Sets kick/snare/hat 16-step integer triggers (0=off, 1=normal, 2=accent, 3=ghost).
+* **`salban_set_synth_sequence`**: Sets note values, ties, and accents for bass or lead 16-step sequences.
 * **`salban_set_pad_sequence`**: Sets triggers, pitch, reverse, and volume for a sampler pad's 16 steps.
 * **`salban_set_sampler_sequence`**: Sets triggers, pitch, reverse, volume, and tie (sustain) for the Phrase Sampler's 16 steps.
-* **`salban_set_drum_sequence`**: Sets kick/snare/hat 16-step velocity triggers.
-* **`salban_set_synth_sequence`**: Sets note values, ties, and accents for bass/lead sequences.
-* **`salban_set_voice_params`**: Sets loop length, speed, and direction.
-* **`salban_clear_sequence`**: Silences all 16 steps of a voice.
-* **`salban_get_parameter_schema`**: Returns valid tweakable parameters and LFO targets.
-* **`salban_get_song_sequencer`**: Returns the active Song Preset Sequencer state (pads, names, repeats, play direction, and auto-chain status).
-* **`salban_configure_song_pad`**: Configures a specific pad (0–7), allowing name assignment, repeat count modification, capturing the current live state, or direct preset snapshot uploading.
-* **`salban_clear_song_pad`**: Resets and clears a pad slot, removing the assigned preset snapshot.
-* **`salban_configure_song_sequencer`**: Updates global song sequencer parameters (toggling Auto-Chain mode and setting play direction like forward, reverse, ping-pong, or random).
-* **`salban_trigger_song_pad`**: Triggers or queues playback of a specific pad in the Song Preset Sequencer immediately or at the next loop boundary.
+* **`salban_set_voice_params`**: Sets loop length (1–16 steps), playback speed, direction, and transpose for any voice.
+* **`salban_clear_sequence`**: Silences all 16 steps of a voice in one call.
+
+### 🎼 Clip Launcher & Piano Roll
+
+The Clip Launcher is a full **DAW-style Piano Roll** with 3 tracks × 5 scenes. ClipIndex encoding: **Morph32 (poly) = 0–4**, **Bassline = 5–9**, **Lead Synth = 10–14**.
+
+* **`salban_get_clip_launcher`**: Returns all 15 clips with their notes (pitch, startBeat, durationBeats, velocity), clip length, name, isEmpty status, and scene/track assignment.
+* **`salban_write_clip`**: Writes or fully replaces all piano-roll notes in a clip. Accepts MIDI note numbers (0–127) **or** note names (`C4`, `F#3`, `Bb2`). Supports setting clip length in bars and a display name.
+* **`salban_delete_clip_notes`**: Deletes notes from a clip filtered by exact pitch and/or beat-range (`startBeatMin`/`startBeatMax`). Omit all filters to clear the entire clip.
+* **`salban_quantize_clip`**: Snaps note start times to the nearest musical grid (64th to quarter note), with adjustable strength (0.0–1.0 for soft quantization).
+
+### 🥁 Drum Auto-Tune
+
+* **`salban_set_drum_autotune`**: Enables pitch-tracking on a drum voice (`kick`, `snare`, or `hat`) so it follows the note sequence of another track in real-time. Target: `off` | `bass` | `lead` | `poly`. The snare uses the **10th overtone** formula (×10, folded to 2000–5000 Hz). Kick folds to 30–75 Hz; Hat to 6000–11000 Hz.
+
+### 🎛️ Morph32 Polyphonic Synthesizer
+
+The **Morph32** is an 8-voice polyphonic synthesizer with dual oscillators, a stereo filter matrix, full ADSR envelopes, and a polyphonic step sequencer.
+
+* **`salban_get_morph32`**: Returns the complete Morph32 state: oscillators, dual filters (main + stereo), amp/filter ADSR envelopes, voice configuration, mixer, piano-roll sequence, and all LFO assignments targeting the poly voice.
+* **`salban_set_morph32_params`**: Configures any combination of Morph32 parameters in a single call. Includes:
+  * **Oscillators:** `oscType1`/`oscType2` (`sawtooth`|`square`|`triangle`|`sine`|`noise`|`wavetable`), `oscMix`, `osc1Footage`/`osc2Footage` (`8`|`16`|`32`), `ringMod`
+  * **Main Filter:** `filterMode` (`lowpass`|`highpass`), `cutoff` (Hz), `resonance`, `envMod`, filter ADSR (`filtA`/`filtD`/`filtS`/`filtR`)
+  * **Stereo Filter:** `stereoMode` (`off`|`spread`|`mirror`), `stereoCutoff`, `stereoSpacing`, `stereoReso`, key-tracking & modulation
+  * **Amp Envelope:** `ampA`/`ampD`/`ampS`/`ampR`
+  * **Voice:** `detune` (cents), `portamento` (s), `maxVoices` (`8`|`16`|`32`), `distributionMode` (`chord`|`unison`), `unisonVoices` (1–4)
+  * **Mixer:** `level`, `pan`, `dlySend`, `revSend`, `fuzSend`
+* **`salban_set_morph32_sequence`**: Sets the polyphonic step-sequencer pattern. Each step holds a chord (array of note names or MIDI numbers), with `tie` and `accent` flags.
+
+### 🎼 Song Mode (Song Preset Sequencer)
+
+* **`salban_get_song_sequencer`**: Returns the active Song Preset Sequencer state (8 pads, names, repeat counts, play direction, and auto-chain status).
+* **`salban_configure_song_pad`**: Configures a pad (0–7): assign a name, set repeat count, capture live state, or load a full preset snapshot.
+* **`salban_clear_song_pad`**: Resets and clears a pad slot, removing the assigned preset.
+* **`salban_configure_song_sequencer`**: Updates global song sequencer settings (Auto-Chain on/off, play direction: forward/reverse/ping-pong/random).
+* **`salban_trigger_song_pad`**: Triggers or queues playback of a specific pad immediately or at the next bar boundary.
+* **`salban_set_transport_state`**: Starts or stops the sequencer transport (`playing: true/false`).
 
 ---
 
@@ -250,3 +307,4 @@ If you want to run the server locally outside of Docker for development:
 This project is confidential and protected under a **Proprietary Evaluation License**. Commercial use, production deployment, modification, or distribution is strictly prohibited without a separate, explicit written agreement from **Matthias Köhler (Oszillation Media & AI Ecosystems)**. Please refer to the [LICENSE](LICENSE) file for full terms, conditions, and third-party notices.
 
 ⚠️ **Important:** These blueprints provide a security architecture pattern and reference implementation. They are not a substitute for a formal security assessment by a qualified professional. Always conduct a Data Protection Impact Assessment (DPIA) under GDPR Article 35 before deploying AI tooling against personal data in regulated environments. Engage your Data Protection Officer and Information Security team before production use.
+

@@ -152,7 +152,14 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
         data.type === "configure_song_pad" ||
         data.type === "clear_song_pad" ||
         data.type === "configure_song_sequencer" ||
-        data.type === "trigger_song_pad"
+        data.type === "trigger_song_pad" ||
+        data.type === "set_transport_state" ||
+        data.type === "clip_launcher_write_clip" ||
+        data.type === "clip_launcher_delete_notes" ||
+        data.type === "clip_launcher_quantize" ||
+        data.type === "drum_set_autotune" ||
+        data.type === "morph32_set_params" ||
+        data.type === "morph32_set_poly_sequence"
       )) {
         console.error(`[WS] Received broadcast request for type "${data.type}"`);
         const textMessage = message.toString();
@@ -890,6 +897,7 @@ const SCHEMA_INFO = {
     "synthParams.modulation.envMod", "synthParams.modulation.decay", "synthParams.modulation.accent", "synthParams.modulation.waveform",
     "synthParams.lead.cutoff", "synthParams.lead.resonance", "synthParams.lead.envMod", "synthParams.lead.decay", "synthParams.lead.accent", "synthParams.lead.env", "synthParams.lead.subLevel", "synthParams.lead.waveMorph", "synthParams.lead.waveform", "synthParams.lead.currentWavetable",
     "synthParams.drums.kickTune", "synthParams.drums.kickDecay", "synthParams.drums.kickAccent", "synthParams.drums.snareTone", "synthParams.drums.snareDecay", "synthParams.drums.snareAccent", "synthParams.drums.hatTone", "synthParams.drums.hatDecay", "synthParams.drums.shuffleAmount",
+    "synthParams.drums.autoTuneKick", "synthParams.drums.autoTuneSnare", "synthParams.drums.autoTuneHat",
     "mixer.bassline.level", "mixer.bassline.pan", "mixer.bassline.dlySend", "mixer.bassline.revSend", "mixer.bassline.fuzSend", "mixer.bassline.mute",
     "mixer.lead.level", "mixer.lead.pan", "mixer.lead.dlySend", "mixer.lead.revSend", "mixer.lead.fuzSend", "mixer.lead.mute",
     "mixer.kick.level", "mixer.kick.pan", "mixer.kick.dlySend", "mixer.kick.revSend", "mixer.kick.fuzSend", "mixer.kick.mute",
@@ -897,8 +905,17 @@ const SCHEMA_INFO = {
     "mixer.hat.level", "mixer.hat.pan", "mixer.hat.dlySend", "mixer.hat.revSend", "mixer.hat.fuzSend", "mixer.hat.mute",
     "mixer.sampler.level", "mixer.sampler.pan", "mixer.sampler.dlySend", "mixer.sampler.revSend", "mixer.sampler.fuzSend", "mixer.sampler.mute",
     "mixer.pads.level", "mixer.pads.pan", "mixer.pads.dlySend", "mixer.pads.revSend", "mixer.pads.fuzSend", "mixer.pads.mute",
+    "mixer.poly.level", "mixer.poly.pan", "mixer.poly.dlySend", "mixer.poly.revSend", "mixer.poly.fuzSend", "mixer.poly.mute",
     "synthParams.sampler.cutoff", "synthParams.sampler.resonance", "synthParams.sampler.decay", "synthParams.sampler.stutter", "synthParams.sampler.chorus", "synthParams.sampler.ambientDecay", "synthParams.sampler.ambientMix", "synthParams.sampler.gateWidth",
     "samplerParams.chop", "samplerParams.raster", "samplerParams.gateActive", "samplerParams.gateRate",
+    "synthParams.poly.detune", "synthParams.poly.cutoff", "synthParams.poly.resonance", "synthParams.poly.envMod",
+    "synthParams.poly.ampA", "synthParams.poly.ampD", "synthParams.poly.ampS", "synthParams.poly.ampR",
+    "synthParams.poly.filtA", "synthParams.poly.filtD", "synthParams.poly.filtS", "synthParams.poly.filtR",
+    "synthParams.poly.oscType1", "synthParams.poly.oscType2", "synthParams.poly.oscMix", "synthParams.poly.osc1Footage", "synthParams.poly.osc2Footage",
+    "synthParams.poly.ringMod", "synthParams.poly.portamento", "synthParams.poly.filterMode",
+    "synthParams.poly.stereoMode", "synthParams.poly.stereoFilterMode", "synthParams.poly.stereoCutoff", "synthParams.poly.stereoSpacing", "synthParams.poly.stereoReso",
+    "synthParams.poly.spacingKeyTrack", "synthParams.poly.spacingCycleMod", "synthParams.poly.spacingSpreadMod",
+    "synthParams.poly.maxVoices", "synthParams.poly.distributionMode", "synthParams.poly.unisonVoices",
     "fx.delay.time", "fx.delay.return", "fx.delay.on", "fx.delay.synced",
     "fx.reverb.size", "fx.reverb.return", "fx.reverb.on",
     "fx.fuzz.drive", "fx.fuzz.tone", "fx.fuzz.return", "fx.fuzz.on",
@@ -1070,6 +1087,460 @@ server.tool(
     return {
       content: [{ type: "text", text: `Success: Trigger command for Pad ${padId + 1} sent to browser.` }]
     };
+  }
+);
+
+// Tool 20: Start or stop transport playback
+server.tool(
+  "salban_set_transport_state",
+  "Starts or stops the Monolith Engine sequencer playback transport.",
+  {
+    playing: z.boolean().describe("Set to true to start playback, or false to stop playback.")
+  },
+  async ({ playing }) => {
+    if (wss.clients.size === 0) {
+      return {
+        content: [{ type: "text", text: "Error: No browser client is currently connected." }],
+        isError: true
+      };
+    }
+    const message = {
+      type: "set_transport_state",
+      playing
+    };
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify(message));
+      }
+    });
+    return {
+      content: [{ type: "text", text: `Success: Transport state requested: ${playing ? "PLAYING" : "STOPPED"}.` }]
+    };
+  }
+);
+
+
+// ─── CLIP LAUNCHER TOOLS ────────────────────────────────────────────────────
+
+// Tool 21: Read all clips from the Clip Launcher
+server.tool(
+  "salban_get_clip_launcher",
+  `Returns all clips from the SALBAN Clip Launcher (MIDI Piano Roll sequencer). The Clip Launcher has 3 tracks (poly=Morph32, bass=Bassline, lead=Lead Synth) × 5 scenes each. ClipIndex encoding: poly clips = 0-4, bass clips = 5-9, lead clips = 10-14. Each clip contains piano-roll style notes with pitch (MIDI number), startBeat, duration, and velocity.`,
+  {},
+  async () => {
+    const guard = requirePreset();
+    if (!guard.ok) return guard.result;
+
+    const clipsData = currentPresetState?.clipLauncher;
+    if (!clipsData) {
+      return { content: [{ type: "text", text: "No Clip Launcher data found in the cached preset. Make sure you have interacted with the Clip Launcher in the browser." }] };
+    }
+
+    // Handle both flat-array format and object-by-track format
+    let summary: any[] = [];
+    const TRACKS = ["poly", "bass", "lead"];
+
+    if (Array.isArray(clipsData)) {
+      // Legacy flat array: return as-is with indices
+      summary = clipsData.map((clip: any, idx: number) => ({
+        clipIndex: idx,
+        track: TRACKS[Math.floor(idx / 5)] ?? "poly",
+        trackName: ["Morph32 (Poly)", "Bassline", "Lead Synth"][Math.floor(idx / 5)] ?? "Poly",
+        scene: idx % 5,
+        name: clip.name ?? `Clip ${idx + 1}`,
+        lengthBars: clip.length ?? clip.lengthBars ?? 1,
+        noteCount: Array.isArray(clip.notes) ? clip.notes.length : 0,
+        isEmpty: clip.isEmpty ?? (Array.isArray(clip.notes) ? clip.notes.length === 0 : true),
+        notes: clip.notes ?? []
+      }));
+    } else {
+      // Object keyed by track name: { poly: [...5], bass: [...5], lead: [...5] }
+      TRACKS.forEach((trackName, trackIdx) => {
+        const scenes = clipsData[trackName];
+        if (!Array.isArray(scenes)) return;
+        scenes.forEach((clip: any, sceneIdx: number) => {
+          const clipIndex = trackIdx * 5 + sceneIdx;
+          summary.push({
+            clipIndex,
+            track: trackName,
+            trackName: ["Morph32 (Poly)", "Bassline", "Lead Synth"][trackIdx],
+            scene: sceneIdx,
+            name: clip?.name ?? `Clip ${sceneIdx + 1}`,
+            lengthBars: clip?.length ?? clip?.lengthBars ?? 1,
+            noteCount: Array.isArray(clip?.notes) ? clip.notes.length : 0,
+            isEmpty: clip?.isEmpty ?? true,
+            notes: (clip?.notes ?? []).map((n: any) => ({
+              pitch:         n.note ?? n.pitch,
+              startBeat:     n.startBeat,
+              durationBeats: n.duration ?? n.durationBeats,
+              velocity:      n.velocity ?? 100
+            }))
+          });
+        });
+      });
+    }
+
+    return { content: [{ type: "text", text: JSON.stringify(summary, null, 2) }] };
+  }
+);
+
+// Tool 22: Write / replace notes in a specific Clip Launcher clip
+server.tool(
+  "salban_write_clip",
+  `Writes (or replaces) the piano-roll notes in a specific Clip Launcher clip. You can set the clip length in bars and beats, and provide an array of note events. Each note has: pitch (MIDI note 0-127 or name like 'C4'), startBeat (float, 0 = bar start), durationBeats (float, e.g. 0.5 = 8th note), velocity (1-127). If notes is an empty array, all notes are cleared. Existing notes in the clip are fully replaced.`,
+  {
+    clipIndex: z.number().int().min(0).describe("Index of the target clip in the Clip Launcher (0-based)."),
+    lengthBars: z.number().int().min(1).max(64).optional().describe("Clip length in bars (e.g. 1, 2, 4, 8). Defaults to current value."),
+    lengthBeats: z.number().int().min(1).max(32).optional().describe("Beats per bar (e.g. 4 for 4/4, 3 for 3/4). Defaults to current value."),
+    name: z.string().optional().describe("Optional new display name for the clip."),
+    notes: z.array(z.object({
+      pitch:         z.union([z.number().int().min(0).max(127), z.string()]).describe("MIDI note number 0-127, or note name like 'C4', 'F#3', 'Bb2'."),
+      startBeat:     z.number().min(0).describe("Start position in beats from the beginning of the clip (e.g. 0.0, 0.5, 1.0)."),
+      durationBeats: z.number().min(0.0625).describe("Note duration in beats (e.g. 0.25=16th, 0.5=8th, 1.0=quarter, 2.0=half)."),
+      velocity:      z.number().int().min(1).max(127).optional().describe("MIDI velocity 1-127. Defaults to 100.")
+    })).describe("Array of note events. Pass [] to clear all notes.")
+  },
+  async ({ clipIndex, lengthBars, lengthBeats, name, notes }) => {
+    if (wss.clients.size === 0) {
+      return { content: [{ type: "text", text: "Error: No browser client connected. Open salban.de first." }], isError: true };
+    }
+
+    // Resolve string note names to MIDI numbers
+    const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+    const resolveNote = (p: number | string): number => {
+      if (typeof p === "number") return p;
+      const m = p.match(/^([A-Ga-g]#?b?)(-?\d+)$/);
+      if (!m) throw new Error(`Invalid note name: "${p}"`);
+      let name = m[1].replace("b", "#"); // enharmonic simplification
+      // handle flat: Bb → A#, Eb → D#, Ab → G#, Db → C#, Gb → F#
+      const flatMap: Record<string,string> = { "Ab":"G#", "Bb":"A#", "Cb":"B", "Db":"C#", "Eb":"D#", "Fb":"E", "Gb":"F#" };
+      if (flatMap[m[1]]) name = flatMap[m[1]];
+      const octave = parseInt(m[2], 10);
+      const noteIdx = NOTE_NAMES.indexOf(name.toUpperCase());
+      if (noteIdx === -1) throw new Error(`Unknown note: "${p}"`);
+      return (octave + 1) * 12 + noteIdx;
+    };
+
+    let resolvedNotes: any[];
+    try {
+      resolvedNotes = notes.map(n => ({
+        pitch:         resolveNote(n.pitch),
+        startBeat:     n.startBeat,
+        durationBeats: n.durationBeats,
+        velocity:      n.velocity ?? 100
+      }));
+    } catch (e: any) {
+      return { content: [{ type: "text", text: `Error resolving note names: ${e.message}` }], isError: true };
+    }
+
+    const payload = {
+      type: "clip_launcher_write_clip",
+      clipIndex,
+      lengthBars,
+      lengthBeats,
+      name,
+      notes: resolvedNotes
+    };
+    const sent = broadcastToClients(payload);
+
+    // Mirror into cache if clipLauncher array exists
+    if (currentPresetState?.clipLauncher?.[clipIndex]) {
+      const clip = currentPresetState.clipLauncher[clipIndex];
+      if (lengthBars  !== undefined) clip.lengthBars  = lengthBars;
+      if (lengthBeats !== undefined) clip.lengthBeats = lengthBeats;
+      if (name        !== undefined) clip.name        = name;
+      clip.notes = resolvedNotes;
+    }
+
+    return { content: [{ type: "text", text: `Clip ${clipIndex} updated with ${resolvedNotes.length} note(s) and sent to ${sent} client(s).` }] };
+  }
+);
+
+// Tool 23: Delete specific notes from a clip by pitch or beat range
+server.tool(
+  "salban_delete_clip_notes",
+  `Deletes notes from a Clip Launcher clip by pitch, beat range, or both. If no filters are given, ALL notes in the clip are deleted. Useful for erasing a specific octave, a specific beat position, or a chord.`,
+  {
+    clipIndex:     z.number().int().min(0).describe("Target clip index (0-based)."),
+    pitch:         z.union([z.number().int().min(0).max(127), z.string()]).optional().describe("If set, only notes with this exact pitch (MIDI number or name like 'C4') are deleted."),
+    startBeatMin:  z.number().optional().describe("If set, only notes starting at or after this beat are deleted."),
+    startBeatMax:  z.number().optional().describe("If set, only notes starting at or before this beat are deleted.")
+  },
+  async ({ clipIndex, pitch, startBeatMin, startBeatMax }) => {
+    const payload = {
+      type: "clip_launcher_delete_notes",
+      clipIndex,
+      pitch,
+      startBeatMin,
+      startBeatMax
+    };
+    const sent = broadcastToClients(payload);
+    return { content: [{ type: "text", text: `Delete notes command sent for clip ${clipIndex} to ${sent} client(s).` }] };
+  }
+);
+
+// Tool 24: Quantize notes in a clip
+server.tool(
+  "salban_quantize_clip",
+  `Quantizes (snaps) note start times in a Clip Launcher clip to the nearest musical grid value. Optionally restricts quantization to a beat range or specific pitch. The quantize grid is expressed in beats (e.g. 0.25 = 16th note, 0.5 = 8th note, 1.0 = quarter note).`,
+  {
+    clipIndex:    z.number().int().min(0).describe("Target clip index (0-based)."),
+    gridBeats:    z.number().min(0.0625).describe("Quantize grid resolution in beats (0.0625=64th, 0.125=32nd, 0.25=16th, 0.5=8th, 1.0=quarter)."),
+    strength:     z.number().min(0).max(1).optional().describe("Quantize strength 0.0–1.0 (1.0 = full snap, 0.5 = halfway). Default: 1.0."),
+    startBeatMin: z.number().optional().describe("Only quantize notes starting at or after this beat."),
+    startBeatMax: z.number().optional().describe("Only quantize notes starting at or before this beat.")
+  },
+  async ({ clipIndex, gridBeats, strength, startBeatMin, startBeatMax }) => {
+    const payload = {
+      type: "clip_launcher_quantize",
+      clipIndex,
+      gridBeats,
+      strength: strength ?? 1.0,
+      startBeatMin,
+      startBeatMax
+    };
+    const sent = broadcastToClients(payload);
+    return { content: [{ type: "text", text: `Quantize command (grid=${gridBeats} beats, strength=${strength ?? 1.0}) sent for clip ${clipIndex} to ${sent} client(s).` }] };
+  }
+);
+
+// ─── DRUM AUTO-TUNE TOOL ─────────────────────────────────────────────────────
+
+// Tool 25: Set drum auto-tune target track
+server.tool(
+  "salban_set_drum_autotune",
+  `Sets the auto-tune mode for a drum voice (kick, snare, or hat). When active, the drum pitch tracks the notes of the specified sequencer track in real-time. The snare uses the 10th overtone (10x multiplier) folded to 2000-5000 Hz for the rattle filter. Kick folds to 30-75 Hz. Hat folds to 6000-11000 Hz. Set to 'off' to disable auto-tuning.`,
+  {
+    voice:       z.enum(["kick", "snare", "hat"]).describe("The drum voice to configure auto-tune for."),
+    targetTrack: z.enum(["off", "bass", "lead", "poly"]).describe("Target track to track pitch from: 'off'=disabled, 'bass'=Bassline, 'lead'=Lead Synth, 'poly'=Morph32.")
+  },
+  async ({ voice, targetTrack }) => {
+    if (wss.clients.size === 0) {
+      return { content: [{ type: "text", text: "Error: No browser client connected. Open salban.de first." }], isError: true };
+    }
+
+    // Send as a tweak_parameter so the browser's parameter-bridge handles it with validation
+    const path = `synthParams.drums.autoTune${voice.charAt(0).toUpperCase() + voice.slice(1)}`;
+    const tweetPayload = { type: "tweak_parameter", path, value: targetTrack };
+    const sent = broadcastToClients(tweetPayload);
+
+    // Also update local cache
+    if (currentPresetState?.synthParams?.drums) {
+      (currentPresetState.synthParams.drums as any)[`autoTune${voice.charAt(0).toUpperCase() + voice.slice(1)}`] = targetTrack;
+    }
+
+    const statusMsg = targetTrack === "off"
+      ? `Drum auto-tune DISABLED for ${voice}.`
+      : `Drum auto-tune for ${voice} set to track '${targetTrack}' sequence.`;
+
+    return { content: [{ type: "text", text: `${statusMsg} Sent to ${sent} client(s).` }] };
+  }
+);
+
+// ─── MORPH32 TOOLS ──────────────────────────────────────────────────────────
+
+// Tool 26: Get Morph32 synthesizer state
+server.tool(
+  "salban_get_morph32",
+  `Returns the full current state of the Morph32 8-voice polyphonic synthesizer. Includes oscillator types (oscType1/oscType2: sawtooth|square|triangle|sine|noise|wavetable), oscillator mix, footage (octave: '8', '16', '32'), dual stereo filter (filterMode, stereoMode, stereoCutoff, stereoSpacing, stereoReso), amplitude ADSR envelope (ampA/D/S/R), filter envelope (filtA/D/filtS/filtR), envMod, detune, portamento, ring modulation, voice distribution (chord/unison), max active voices (8/16/32), and the current Morph32 piano-roll sequence. Also returns the LFO assignments relevant to the poly voice.`,
+  {},
+  async () => {
+    const guard = requirePreset();
+    if (!guard.ok) return guard.result;
+
+    const poly = currentPresetState?.synthParams?.poly ?? {};
+    const polySeq = currentPresetState?.sequences?.poly ?? [];
+    const polyMixer = currentPresetState?.mixer?.poly ?? {};
+    const lfos = currentPresetState?.lfos ?? [];
+
+    const result = {
+      oscillators: {
+        oscType1:    poly.oscType1    ?? "sawtooth",
+        oscType2:    poly.oscType2    ?? "sawtooth",
+        oscMix:      poly.oscMix      ?? 0.5,
+        osc1Footage: poly.osc1Footage ?? "16",
+        osc2Footage: poly.osc2Footage ?? "16",
+        ringMod:     poly.ringMod     ?? 0
+      },
+      filter: {
+        filterMode:       poly.filterMode       ?? "lowpass",
+        cutoff:           poly.cutoff           ?? 1000,
+        resonance:        poly.resonance        ?? 0,
+        envMod:           poly.envMod           ?? 0,
+        filtA:            poly.filtA            ?? 0.01,
+        filtD:            poly.filtD            ?? 0.3,
+        filtS:            poly.filtS            ?? 0.5,
+        filtR:            poly.filtR            ?? 0.3
+      },
+      stereoFilter: {
+        stereoMode:       poly.stereoMode       ?? "off",
+        stereoFilterMode: poly.stereoFilterMode ?? "lowpass",
+        stereoCutoff:     poly.stereoCutoff     ?? 1000,
+        stereoSpacing:    poly.stereoSpacing    ?? 0,
+        stereoReso:       poly.stereoReso       ?? 0,
+        spacingKeyTrack:  poly.spacingKeyTrack  ?? 0,
+        spacingCycleMod:  poly.spacingCycleMod  ?? 0,
+        spacingSpreadMod: poly.spacingSpreadMod ?? 0
+      },
+      ampEnvelope: {
+        ampA: poly.ampA ?? 0.01,
+        ampD: poly.ampD ?? 0.3,
+        ampS: poly.ampS ?? 0.8,
+        ampR: poly.ampR ?? 0.3
+      },
+      voice: {
+        detune:           poly.detune           ?? 0,
+        portamento:       poly.portamento       ?? 0,
+        maxVoices:        poly.maxVoices        ?? 8,
+        distributionMode: poly.distributionMode ?? "chord",
+        unisonVoices:     poly.unisonVoices     ?? 1
+      },
+      mixer: polyMixer,
+      sequence: {
+        stepCount:    polySeq.length,
+        steps:        polySeq
+      },
+      lfoAssignments: lfos.filter((lfo: any) =>
+        typeof lfo?.target === "string" && lfo.target.toLowerCase().includes("poly")
+      )
+    };
+
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+// Tool 27: Configure Morph32 synthesizer parameters
+server.tool(
+  "salban_set_morph32_params",
+  `Configures one or more parameters of the Morph32 8-voice polyphonic synthesizer. All fields are optional — only provided fields are changed. Oscillator types: sawtooth|square|triangle|sine|noise|wavetable. Footage (octave select): '8'|'16'|'32'. Filter modes: lowpass|highpass. Stereo modes: off|spread|mirror. Distribution: chord|unison. Max voices: 8|16|32. All numeric values are in the same units as the groovebox knobs (e.g. cutoff in Hz 20-20000, envelope times in seconds 0.001-4.0, detune in cents 0-100, etc.).`,
+  {
+    // Oscillators
+    oscType1:        z.enum(["sawtooth","square","triangle","sine","noise","wavetable"]).optional().describe("Oscillator 1 waveform type."),
+    oscType2:        z.enum(["sawtooth","square","triangle","sine","noise","wavetable"]).optional().describe("Oscillator 2 waveform type."),
+    oscMix:          z.number().min(0).max(1).optional().describe("Oscillator blend 0.0 (100% OSC1) to 1.0 (100% OSC2)."),
+    osc1Footage:     z.enum(["8","16","32"]).optional().describe("OSC1 octave selector: '8'=super-low, '16'=normal, '32'=sub."),
+    osc2Footage:     z.enum(["8","16","32"]).optional().describe("OSC2 octave selector."),
+    ringMod:         z.number().min(0).max(100).optional().describe("Ring modulation amount (0=off, 100=full)."),
+    // Main filter
+    filterMode:      z.enum(["lowpass","highpass"]).optional().describe("Main filter type."),
+    cutoff:          z.number().min(20).max(20000).optional().describe("Filter cutoff frequency in Hz."),
+    resonance:       z.number().min(0).max(100).optional().describe("Filter resonance 0-100."),
+    envMod:          z.number().min(-100).max(100).optional().describe("Filter envelope modulation depth."),
+    // Filter envelope
+    filtA:           z.number().min(0.001).max(4).optional().describe("Filter attack time in seconds."),
+    filtD:           z.number().min(0.001).max(4).optional().describe("Filter decay time in seconds."),
+    filtS:           z.number().min(0).max(1).optional().describe("Filter sustain level 0.0-1.0."),
+    filtR:           z.number().min(0.001).max(4).optional().describe("Filter release time in seconds."),
+    // Amp envelope
+    ampA:            z.number().min(0.001).max(4).optional().describe("Amplitude attack time in seconds."),
+    ampD:            z.number().min(0.001).max(4).optional().describe("Amplitude decay time in seconds."),
+    ampS:            z.number().min(0).max(1).optional().describe("Amplitude sustain level 0.0-1.0."),
+    ampR:            z.number().min(0.001).max(4).optional().describe("Amplitude release time in seconds."),
+    // Stereo filter
+    stereoMode:      z.enum(["off","spread","mirror"]).optional().describe("Stereo filter mode."),
+    stereoFilterMode: z.enum(["lowpass","highpass"]).optional().describe("Stereo filter type."),
+    stereoCutoff:    z.number().min(20).max(20000).optional().describe("Stereo filter cutoff in Hz."),
+    stereoSpacing:   z.number().min(0).max(100).optional().describe("Stereo filter spacing 0-100."),
+    stereoReso:      z.number().min(0).max(100).optional().describe("Stereo filter resonance 0-100."),
+    spacingKeyTrack: z.number().min(0).max(100).optional().describe("Stereo spacing key-tracking amount 0-100."),
+    spacingCycleMod: z.number().min(0).max(100).optional().describe("Stereo spacing cycle modulation 0-100."),
+    spacingSpreadMod: z.number().min(0).max(100).optional().describe("Stereo spacing spread modulation 0-100."),
+    // Voice
+    detune:          z.number().min(0).max(100).optional().describe("Voice detune in cents 0-100."),
+    portamento:      z.number().min(0).max(1).optional().describe("Portamento glide time in seconds."),
+    maxVoices:       z.enum(["8","16","32"]).optional().describe("Maximum simultaneous voices: '8', '16', or '32'."),
+    distributionMode: z.enum(["chord","unison"]).optional().describe("Voice distribution: 'chord'=polyphonic, 'unison'=stacked."),
+    unisonVoices:    z.number().int().min(1).max(4).optional().describe("Number of unison voices stacked per note (1-4, only used when distributionMode='unison')."),
+    // Mixer
+    level:           z.number().min(0).max(100).optional().describe("Morph32 output level 0-100."),
+    pan:             z.number().min(-100).max(100).optional().describe("Pan position -100 (L) to 100 (R)."),
+    dlySend:         z.number().min(0).max(100).optional().describe("Delay send amount 0-100."),
+    revSend:         z.number().min(0).max(100).optional().describe("Reverb send amount 0-100."),
+    fuzSend:         z.number().min(0).max(100).optional().describe("Fuzz send amount 0-100.")
+  },
+  async (params) => {
+    if (wss.clients.size === 0) {
+      return { content: [{ type: "text", text: "Error: No browser client connected. Open salban.de first." }], isError: true };
+    }
+
+    const tweakMap: Record<string, string> = {
+      oscType1: "synthParams.poly.oscType1", oscType2: "synthParams.poly.oscType2",
+      oscMix: "synthParams.poly.oscMix", osc1Footage: "synthParams.poly.osc1Footage", osc2Footage: "synthParams.poly.osc2Footage",
+      ringMod: "polyRingMod",
+      filterMode: "synthParams.poly.filterMode",
+      cutoff: "polyCutoff", resonance: "polyResonance", envMod: "polyEnvMod",
+      filtA: "polyFiltA", filtD: "polyFiltD", filtS: "polyFiltS", filtR: "polyFiltR",
+      ampA: "polyAmpA", ampD: "polyAmpD", ampS: "polyAmpS", ampR: "polyAmpR",
+      stereoMode: "synthParams.poly.stereoMode", stereoFilterMode: "synthParams.poly.stereoFilterMode",
+      stereoCutoff: "polyStereoCutoff", stereoSpacing: "polyStereoSpacing", stereoReso: "polyStereoReso",
+      spacingKeyTrack: "polySpacingKeyTrack", spacingCycleMod: "polySpacingCycleMod", spacingSpreadMod: "polySpacingSpreadMod",
+      detune: "polyDetune", portamento: "polyPortamento",
+      maxVoices: "synthParams.poly.maxVoices", distributionMode: "synthParams.poly.distributionMode", unisonVoices: "synthParams.poly.unisonVoices",
+      level: "mixer.poly.level", pan: "mixer.poly.pan", dlySend: "mixer.poly.dlySend", revSend: "mixer.poly.revSend", fuzSend: "mixer.poly.fuzSend"
+    };
+
+    let sentCount = 0;
+    const changes: string[] = [];
+
+    for (const [key, rawVal] of Object.entries(params)) {
+      if (rawVal === undefined || rawVal === null) continue;
+      const path = tweakMap[key];
+      if (!path) continue;
+
+      const value = key === "maxVoices" ? parseInt(rawVal as string, 10) : rawVal;
+      broadcastToClients({ type: "tweak_parameter", path, value });
+      sentCount++;
+      changes.push(`${path} = ${value}`);
+
+      // Update cache
+      if (currentPresetState) {
+        try { setNestedPath(currentPresetState, path, value); } catch (_) {}
+      }
+    }
+
+    if (changes.length === 0) {
+      return { content: [{ type: "text", text: "No parameters were provided. Nothing changed." }] };
+    }
+
+    return { content: [{ type: "text", text: `Morph32: applied ${changes.length} parameter(s):\n${changes.join("\n")}` }] };
+  }
+);
+
+// Tool 28: Set Morph32 polyphonic piano-roll sequence
+server.tool(
+  "salban_set_morph32_sequence",
+  `Sets the polyphonic step-sequencer pattern for the Morph32 synthesizer. Each step can hold multiple simultaneous notes (a chord). Steps have: notes (array of note names/numbers), active (bool), tie (bool for sustain into next step), accent (bool for velocity boost). Use up to 16 steps. Pass an empty notes array for a rest step.`,
+  {
+    steps: z.array(z.object({
+      active:  z.boolean().describe("Whether this step triggers."),
+      notes:   z.array(z.union([z.string(), z.number().int().min(0).max(127)])).describe("Notes to play as a chord (e.g. ['C3','E3','G3'] or [48,52,55]). Empty array = rest."),
+      tie:     z.boolean().optional().describe("Sustain into next step (no retrigger)."),
+      accent:  z.boolean().optional().describe("Accent (velocity boost).")
+    })).min(1).max(16).describe("1 to 16 step objects defining the Morph32 sequence.")
+  },
+  async ({ steps }) => {
+    const guard = requirePreset();
+    if (!guard.ok) return guard.result;
+
+    // Resolve note names to strings (keep as-is if already strings, normalize if numbers)
+    const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+    const midiToName = (n: number) => `${NOTE_NAMES[n % 12]}${Math.floor(n / 12) - 1}`;
+
+    const resolvedSteps = steps.map(step => ({
+      active: step.active,
+      notes: (step.notes ?? []).map((n: string | number) =>
+        typeof n === "number" ? midiToName(n) : n
+      ),
+      tie:    step.tie    ?? false,
+      accent: step.accent ?? false
+    }));
+
+    const preset = clonePreset();
+    preset.sequences.poly = resolvedSteps;
+    currentPresetState = preset;
+
+    const sent = broadcastToClients({ type: "apply_preset", preset });
+    return { content: [{ type: "text", text: `Morph32 sequence set (${resolvedSteps.length} steps) and sent to ${sent} client(s).` }] };
   }
 );
 
