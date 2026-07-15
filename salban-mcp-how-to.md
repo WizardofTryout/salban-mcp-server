@@ -194,3 +194,35 @@ Wenn Sie neue Features oder Tools hinzufügen möchten:
    docker build -t salban-mcp-server .
    ```
 4. **IDE aktualisieren:** Die IDE lädt das neue Image beim nächsten Start automatisch, da in der Config `salban-mcp-server:latest` hinterlegt ist.
+
+---
+
+## 📦 7. Release-ZIP für den Download-Bereich erstellen
+
+Wenn ein neues Release für Nutzer bereitgestellt wird, wird ein ZIP-Archiv ohne den `assets/`-Ordner (reine Bild-Assets für die README, unnötig für User) und ohne `node_modules/` sowie `.git/` erstellt:
+
+```bash
+# Aus dem Verzeichnis mcp-server/ ausführen (eine Ebene über dem Repo-Ordner):
+cd /path/to/mcp-server
+
+# Altes ZIP entfernen, neues erstellen (OHNE assets/)
+rm -f salban-mcp-server.zip && zip -r salban-mcp-server.zip salban-mcp-server/ \
+  --exclude "salban-mcp-server/.git/*" \
+  --exclude "salban-mcp-server/node_modules/*" \
+  --exclude "salban-mcp-server/assets/*" \
+  --exclude "salban-mcp-server/.DS_Store" \
+  --exclude "salban-mcp-server/.gitignore"
+
+# In den Downloads-Ordner der Website kopieren:
+cp salban-mcp-server.zip /path/to/httpdocs/downloads/salban-mcp-server.zip
+```
+
+> ⚠️ **Wichtig:** Der `assets/`-Ordner enthält ausschließlich Vorschaubilder für die GitHub-README. Er ist für den Betrieb des Servers nicht erforderlich und soll **nicht** ins Nutzer-ZIP aufgenommen werden.
+
+Das ZIP enthält:
+- `src/index.ts` — vollständiger TypeScript-Quellcode
+- `build/index.js` — vorkompilierter JavaScript-Build (direkt ausführbar)
+- `Dockerfile` + `docker-compose.yml` — Container-Setup
+- `package.json` + `package-lock.json` — npm-Abhängigkeiten
+- `README.md` + `salban-mcp-how-to.md` + `LICENSE`
+- `claude_desktop_config.json` — Beispielkonfiguration für Claude Desktop
