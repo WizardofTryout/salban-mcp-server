@@ -4,6 +4,8 @@ import { WebSocketServer, WebSocket } from "ws";
 import { z } from "zod";
 import { IncomingMessage } from "http";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 
 // Initialize the MCP Server
 const server = new McpServer({
@@ -126,6 +128,22 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
           ws.terminate();
           return;
         }
+      }
+
+      // Handle async responses from the browser client
+      if (data && data.type === "response") {
+        const requestId = data.requestId;
+        const pending = pendingRequests.get(requestId);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          pendingRequests.delete(requestId);
+          if (data.success) {
+            pending.resolve(data.content);
+          } else {
+            pending.reject(new Error(data.error || "Unknown browser response error"));
+          }
+        }
+        return;
       }
 
       // Standard message processing (preset updates / states)
@@ -603,6 +621,53 @@ server.tool(
 
 
 // ─── SHARED HELPERS ────────────────────────────────────────────────────────
+
+// A registry to handle async request-response over WebSocket
+const pendingRequests = new Map<string, { resolve: (val: any) => void; reject: (err: any) => void; timeout: NodeJS.Timeout }>();
+
+function sendRequestToBrowser(type: string, payload: any = {}, timeoutMs = 5000): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if (wss.clients.size === 0) {
+      return reject(new Error("No browser client connected."));
+    }
+    const requestId = Math.random().toString(36).substring(2, 15);
+    const timeout = setTimeout(() => {
+      pendingRequests.delete(requestId);
+      reject(new Error("Request to browser timed out."));
+    }, timeoutMs);
+
+    pendingRequests.set(requestId, { resolve, reject, timeout });
+
+    broadcastToClients({
+      type,
+      requestId,
+      ...payload
+    });
+  });
+}
+
+function readLocalFile(filename: string): string | null {
+  const cleanName = path.basename(filename);
+  const pathsToTry = [
+    path.resolve(process.cwd(), cleanName),
+    path.resolve(process.cwd(), "..", cleanName),
+    path.resolve(process.cwd(), "../..", cleanName),
+    path.resolve(process.cwd(), "httpdocs", cleanName),
+    path.resolve(process.cwd(), "../httpdocs", cleanName),
+    path.resolve(process.cwd(), "../../httpdocs", cleanName),
+    path.join("/Volumes/Spacestation/virtual-buddy-exchange/Tools-Development/projects/salban.de", cleanName),
+    path.join("/Volumes/Spacestation/virtual-buddy-exchange/Tools-Development/projects/salban.de/httpdocs", cleanName),
+  ];
+
+  for (const p of pathsToTry) {
+    try {
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+        return fs.readFileSync(p, "utf-8");
+      }
+    } catch (_) {}
+  }
+  return null;
+}
 
 /** Broadcast a JSON payload to all open WebSocket clients. Returns the count. */
 function broadcastToClients(payload: object): number {
@@ -1541,6 +1606,128 @@ server.tool(
 
     const sent = broadcastToClients({ type: "apply_preset", preset });
     return { content: [{ type: "text", text: `Morph32 sequence set (${resolvedSteps.length} steps) and sent to ${sent} client(s).` }] };
+  }
+);
+
+// Tool 29: Get active MIDI configuration
+server.tool(
+  "salban_get_midi_config",
+  "Returns the current MIDI configuration of the SAL BAN Monolith Engine. This includes active/connected MIDI input and output devices, channel routing assignments, Omni routing target, and the default CC mapping layout.",
+  {},
+  async () => {
+    if (wss.clients.size === 0) {
+      return { content: [{ type: "text", text: "Error: No browser client connected. Open salban.de first." }], isError: true };
+    }
+    
+    const config = currentPresetState?.midiConfig || {
+      channelRouting: {},
+      omniRoute: "off",
+      inputs: [],
+      outputs: []
+    };
+
+    const defaultCcLayout = {
+      "30": "Bass Mute (On/Off)",
+      "31": "Bass Level (0-127)",
+      "32": "Bass Cutoff (0-127)",
+      "33": "Bass Resonance (0-127)",
+      "34": "Bass Decay (0-127)",
+      "35": "Bass Envelope Mod (0-127)",
+      "42": "Lead Mute (On/Off)",
+      "43": "Lead Level (0-127)",
+      "44": "Lead Cutoff (0-127)",
+      "45": "Lead Resonance (0-127)",
+      "46": "Lead Decay (0-127)",
+      "47": "Lead Envelope Mod (0-127)",
+      "115": "Poly Mute (On/Off)",
+      "116": "Poly Level (0-127)",
+      "117": "Poly Cutoff (0-127)",
+      "118": "Poly Resonance (0-127)",
+      "119": "Poly Attack (0-127)",
+      "120": "Poly Decay (0-127)"
+    };
+
+    const result = {
+      activeMidiInputs: config.inputs || [],
+      activeMidiOutputs: config.outputs || [],
+      channelRouting: config.channelRouting || {},
+      omniRoute: config.omniRoute || "off",
+      defaultCcMappings: defaultCcLayout,
+      helpText: "To route a physical MIDI controller, connect it via USB. The browser automatically detects it. Route specific MIDI channels (1-16) to synth engines using salban_configure_midi, or use Omni mode to route all incoming channels to a single voice."
+    };
+
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+// Tool 30: Configure MIDI settings
+server.tool(
+  "salban_configure_midi",
+  "Configures MIDI routing settings. You can set the Omni routing target or route individual MIDI channels (1-16) to specific synthesizer voices.",
+  {
+    omniRoute: z.enum(["off", "lead", "bass", "sampler", "poly"]).optional().describe("Set global Omni routing target."),
+    channel: z.number().int().min(1).max(16).optional().describe("Specific MIDI channel (1-16) to configure."),
+    target: z.enum(["off", "lead", "bass", "sampler", "poly"]).optional().describe("Target voice for the configured channel (required if channel is specified).")
+  },
+  async ({ omniRoute, channel, target }) => {
+    if (wss.clients.size === 0) {
+      return { content: [{ type: "text", text: "Error: No browser client connected. Open salban.de first." }], isError: true };
+    }
+
+    if (omniRoute) {
+      broadcastToClients({ type: "midi_set_omni_route", route: omniRoute });
+      if (currentPresetState && currentPresetState.midiConfig) {
+        currentPresetState.midiConfig.omniRoute = omniRoute;
+      }
+      return { content: [{ type: "text", text: `MIDI Omni Route configured to: ${omniRoute}` }] };
+    }
+
+    if (channel !== undefined) {
+      if (!target) {
+        return { content: [{ type: "text", text: "Error: 'target' parameter is required when 'channel' is specified." }], isError: true };
+      }
+      broadcastToClients({ type: "midi_set_channel_route", channel, target });
+      if (currentPresetState && currentPresetState.midiConfig && currentPresetState.midiConfig.channelRouting) {
+        currentPresetState.midiConfig.channelRouting[channel.toString()] = target;
+      }
+      return { content: [{ type: "text", text: `MIDI Channel ${channel} configured to: ${target}` }] };
+    }
+
+    return { content: [{ type: "text", text: "Error: Must specify either 'omniRoute' or 'channel' + 'target'." }], isError: true };
+  }
+);
+
+// Tool 31: Read website page or markdown file contents
+server.tool(
+  "salban_read_website_content",
+  "Reads the text contents of the website files (like index.html, mcp-jam.html, midi-jam.html, architecture_and_status.md, etc.) to understand the background, updates, or configuration details of the Sal Ban synthesizer project.",
+  {
+    path: z.string().describe("The relative file path or filename to read (e.g. 'index.html', 'midi-jam.html', 'mcp-jam.html', 'architecture_and_status.md', 'llms.txt').")
+  },
+  async ({ path: filePath }) => {
+    // 1. Try to read locally first
+    const localContent = readLocalFile(filePath);
+    if (localContent !== null) {
+      return { content: [{ type: "text", text: localContent }] };
+    }
+
+    // 2. Fallback to requesting via browser WebSocket
+    if (wss.clients.size === 0) {
+      return { 
+        content: [{ type: "text", text: `Error: File '${filePath}' not found locally, and no browser client is connected for remote fetch fallback.` }], 
+        isError: true 
+      };
+    }
+
+    try {
+      const content = await sendRequestToBrowser("get_dom_content", { path: filePath });
+      return { content: [{ type: "text", text: content }] };
+    } catch (err: any) {
+      return { 
+        content: [{ type: "text", text: `Error reading file '${filePath}': ${err.message}` }], 
+        isError: true 
+      };
+    }
   }
 );
 

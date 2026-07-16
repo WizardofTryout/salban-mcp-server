@@ -225,7 +225,7 @@ Add the following entry (adjusting the paths or command if running via Docker):
 
 ## 📡 Registered MCP Tools
 
-The server exposes **28 rich semantic tools** to the AI assistant, organized into six functional groups:
+The server exposes **31 rich semantic tools** to the AI assistant, organized into seven functional groups:
 
 ### 🗂️ Preset & Parameter Management
 
@@ -285,6 +285,12 @@ The **Morph32** is an 8-voice polyphonic synthesizer with dual oscillators, a st
 * **`salban_configure_song_sequencer`**: Updates global song sequencer settings (Auto-Chain on/off, play direction: forward/reverse/ping-pong/random).
 * **`salban_trigger_song_pad`**: Triggers or queues playback of a specific pad immediately or at the next bar boundary.
 * **`salban_set_transport_state`**: Starts or stops the sequencer transport (`playing: true/false`).
+
+### 📡 MIDI Routing & Page Reading
+
+* **`salban_get_midi_config`**: Returns the active/connected MIDI input/output devices, individual channel routing assignments, global Omni routing target, and the default CC mapping layout.
+* **`salban_configure_midi`**: Configures global Omni routing or routes individual MIDI channels (1–16) to specific synthesizer voices (`off`, `lead`, `bass`, `sampler`, `poly`).
+* **`salban_read_website_content`**: Reads the text content of any website page, guide, or documentation file in the project (e.g. `index.html`, `mcp-jam.html`, `midi-jam.html`, `architecture_and_status.md`, `llms.txt`) to understand context or explain settings.
 
 ---
 

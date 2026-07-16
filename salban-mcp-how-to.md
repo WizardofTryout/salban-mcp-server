@@ -75,7 +75,7 @@ Aus Sicherheitsgründen schränkt der Browser (insb. Brave/Chrome) Zugriffe von 
 
 ## 🛠️ 5. Registrierte MCP Tools
 
-Der Server stellt der KI nun insgesamt **19 Werkzeuge** zur Verfügung (definiert in [src/index.ts](file:///Volumes/Spacestation/virtual-buddy-exchange/Tools-Development/projects/salban.de/mcp-server/salban-mcp-server/src/index.ts)), unterteilt in vier Kategorien:
+Der Server stellt der KI nun insgesamt **31 Werkzeuge** zur Verfügung (definiert in [src/index.ts](file:///Volumes/Spacestation/virtual-buddy-exchange/Tools-Development/projects/salban.de/mcp-server/salban-mcp-server/src/index.ts)), unterteilt in sieben Kategorien:
 
 ### 🎛️ Preset- & Parameter-Steuerung
 1. **`salban_get_preset`**
@@ -176,6 +176,68 @@ Der Server stellt der KI nun insgesamt **19 Werkzeuge** zur Verfügung (definier
     * **Beschreibung:** Startet die Wiedergabe eines bestimmten Pads (0 bis 7) sofort oder reiht es an der nächsten Taktgrenze ein.
     * **Argumente:**
       - `padId`: Index des Pads (0 bis 7).
+
+### 🎹 Clip Launcher & Piano Roll
+20. **`salban_get_clip_launcher`**
+    * **Beschreibung:** Gibt den aktuellen Zustand aller 15 Clips (3 Spuren × 5 Szenen) samt Notendaten (Pitch, startBeat, durationBeats, Velocity) zurück.
+    * **Argumente:** Keine.
+21. **`salban_write_clip`**
+    * **Beschreibung:** Erstellt oder überschreibt alle Piano-Roll-Noten eines Clips. Akzeptiert MIDI-Notennummern oder Notennamen.
+    * **Argumente:**
+      - `clipIndex`: Der Clip-Index (0–14). Tracks: Poly/Morph32 (0–4), Bassline (5–9), Lead Synth (10–14).
+      - `notes`: Array von Objekten `{ pitch: number|string, startBeat: number, durationBeats: number, velocity?: number }`.
+      - `lengthBars`: (optional) Clip-Länge in Takten.
+      - `name`: (optional) Name des Clips.
+22. **`salban_delete_clip_notes`**
+    * **Beschreibung:** Löscht Noten aus einem Clip gefiltert nach Tonhöhe und/oder Beat-Bereich.
+    * **Argumente:**
+      - `clipIndex`: Index des Clips.
+      - `pitch`: (optional) Zu löschende Tonhöhe.
+      - `startBeatMin` / `startBeatMax`: (optional) Beat-Bereich.
+23. **`salban_quantize_clip`**
+    * **Beschreibung:** Rauscht Note-Startzeiten auf das nächstgelegene musikalische Raster ein.
+    * **Argumente:**
+      - `clipIndex`: Index des Clips.
+      - `gridBeats`: Quantisierungsraster in Beats (z. B. `0.25` für 16tel).
+      - `strength`: (optional) Stärke der Quantisierung (0.0 bis 1.0).
+
+### 🥁 Drum Auto-Tune & Transport
+24. **`salban_set_drum_autotune`**
+    * **Beschreibung:** Aktiviert die automatische Pitch-Verfolgung für Kick, Snare oder Hat basierend auf einer Ziel-Spur.
+    * **Argumente:**
+      - `voice`: `"kick"`, `"snare"`, oder `"hat"`.
+      - `target`: `"off"`, `"bass"`, `"lead"`, oder `"poly"`.
+25. **`salban_set_transport_state`**
+    * **Beschreibung:** Startet oder stoppt die Sequenzer-Wiedergabe.
+    * **Argumente:**
+      - `playing`: Boolean (true zum Abspielen, false zum Stoppen).
+
+### 🎛️ Morph32 Polyphoner Synthesizer
+26. **`salban_get_morph32`**
+    * **Beschreibung:** Gibt den vollständigen Zustand des Morph32 Synthesizers zurück (Oszillatoren, Filter, Hüllkurven, Sequenz, Panning, FX).
+    * **Argumente:** Keine.
+27. **`salban_set_morph32_params`**
+    * **Beschreibung:** Konfiguriert Morph32 Synthesizer-Parameter (Waveform, Filter, Envelopes, Detune, Unison, Pegel).
+    * **Argumente:** Verschiedene optionale Synthesizer-Parameter.
+28. **`salban_set_morph32_sequence`**
+    * **Beschreibung:** Programmiert das polyphone Step-Sequenzer-Muster des Morph32-Synthesizers mit Chord-Support pro Schritt.
+    * **Argumente:**
+      - `steps`: Array von Schritten mit Noten-Arrays, `tie` und `accent` Flags.
+
+### 📡 MIDI-Routing & Projekt-Dateien lesen
+29. **`salban_get_midi_config`**
+    * **Beschreibung:** Gibt die aktuelle MIDI-Konfiguration, active/connected Eingabe-/Ausgabegeräte, Kanal-Routings und Standard-CC-Mappings zurück.
+    * **Argumente:** Keine.
+30. **`salban_configure_midi`**
+    * **Beschreibung:** Konfiguriert die globale Omni-Routing-Zielspur oder leitet einzelne MIDI-Kanäle (1-16) an Synth-Voices weiter.
+    * **Argumente:**
+      - `omniRoute`: (optional) Zielspur für Omni-Routing.
+      - `channel`: (optional) Spezifischer MIDI-Kanal (1-16).
+      - `target`: (optional) Zielspur für den Kanal (erforderlich bei Angabe von `channel`).
+31. **`salban_read_website_content`**
+    * **Beschreibung:** Liest den Textinhalt von Website-Seiten, Anleitungen oder Dokumenten im Projektverzeichnis zur Beantwortung von Benutzerfragen.
+    * **Argumente:**
+      - `path`: Name oder relativer Pfad der Datei (z. B. `index.html`, `mcp-jam.html`, `architecture_and_status.md`).
 
 ---
 
