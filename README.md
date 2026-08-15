@@ -1,8 +1,14 @@
 # SAL BAN Monolith Engine - Model Context Protocol (MCP) Server
 
+[![GitHub Repo](https://img.shields.io/badge/GitHub-WizardofTryout%2Fsalban--mcp--server-blue?logo=github)](https://github.com/WizardofTryout/salban-mcp-server)
+[![MCP Spec](https://img.shields.io/badge/MCP%20Spec-2026--07--28%20Compliant-green)](https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/)
+[![License](https://img.shields.io/badge/License-Proprietary%20Evaluation-orange)](LICENSE)
+
 This is the official Model Context Protocol (MCP) server for the [SAL BAN Monolith Engine](https://salban.de), a powerful, cutting-edge in-browser synthesizer and groovebox. 
 
 This MCP server acts as a local WebSocket bridge, allowing agentic AI coding assistants (such as Claude Desktop, Cursor, or Antigravity) to directly program sequences, tweak synthesizer parameters, load audio samples, and interact with the Monolith Engine in real-time.
+
+Built in compliance with the **MCP Specification 2026-07-28 (Stateless Core, Prompt-Caching via `CacheableResult`, and Sub-Second Co-Producing Latency)**.
 
 <p align="center">
   <img src="assets/salban-monolith-engine-dark.png" alt="SAL BAN Monolith Engine - Dark Mode" width="48%" />

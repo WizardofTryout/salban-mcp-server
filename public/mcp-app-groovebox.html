@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAL BAN - MCP Interactive Groovebox App</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #0a0c10;
+            --panel-bg: rgba(18, 22, 32, 0.85);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --accent-green: #39ff14;
+            --accent-cyan: #00f0ff;
+            --accent-magenta: #ff0077;
+            --accent-yellow: #ffea00;
+            --text-main: #f0f4fc;
+            --text-muted: #7e8b9b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            font-family: 'Outfit', sans-serif;
+            padding: 16px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .groovebox-container {
+            width: 100%;
+            max-width: 640px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            backdrop-filter: blur(20px);
+            padding: 20px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(57, 255, 20, 0.05);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--panel-border);
+            padding-bottom: 12px;
+        }
+
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-badge {
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan));
+            color: #000;
+            font-weight: 900;
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: 6px;
+            letter-spacing: 1px;
+        }
+
+        .title {
+            font-weight: 700;
+            font-size: 1.1rem;
+            letter-spacing: 0.5px;
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 1px solid var(--panel-border);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            box-shadow: 0 0 8px var(--accent-green);
+        }
+
+        /* Scope Visualizer */
+        .scope-card {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--panel-border);
+            border-radius: 10px;
+            height: 60px;
+            margin-bottom: 16px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        canvas#scopeCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* Transport Bar */
+        .transport-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            background: rgba(0, 0, 0, 0.25);
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1px solid var(--panel-border);
+        }
+
+        .play-btn {
+            background: linear-gradient(135deg, #1f293d, #141a27);
+            border: 1px solid var(--accent-green);
+            color: var(--accent-green);
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+            padding: 8px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+            box-shadow: 0 0 10px rgba(57, 255, 20, 0.15);
+        }
+
+        .play-btn.playing {
+            background: var(--accent-green);
+            color: #000;
+            box-shadow: 0 0 16px rgba(57, 255, 20, 0.4);
+        }
+
+        .bpm-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+        }
+
+        .bpm-val {
+            color: var(--accent-cyan);
+            font-weight: 700;
+            min-width: 60px;
+        }
+
+        input[type="range"] {
+            accent-color: var(--accent-cyan);
+            cursor: pointer;
+        }
+
+        /* Sequencer Grid */
+        .sequencer-card {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .track-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .track-label {
+            width: 60px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            text-transform: uppercase;
+        }
+
+        .track-row.kick .track-label { color: var(--accent-cyan); }
+        .track-row.snare .track-label { color: var(--accent-yellow); }
+        .track-row.bass .track-label { color: var(--accent-green); }
+        .track-row.lead .track-label { color: var(--accent-magenta); }
+
+        .mute-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--panel-border);
+            color: var(--text-muted);
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 4px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .mute-btn.muted {
+            background: rgba(255, 0, 85, 0.2);
+            border-color: var(--accent-magenta);
+            color: var(--accent-magenta);
+        }
+
+        .steps-container {
+            display: grid;
+            grid-template-columns: repeat(16, 1fr);
+            gap: 3px;
+            flex: 1;
+        }
+
+        .step-btn {
+            aspect-ratio: 1;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--panel-border);
+            border-radius: 4px;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.1s;
+        }
+
+        .step-btn:nth-child(4n+1) {
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .step-btn.active.kick { background: var(--accent-cyan); box-shadow: 0 0 8px var(--accent-cyan); }
+        .step-btn.active.snare { background: var(--accent-yellow); box-shadow: 0 0 8px var(--accent-yellow); }
+        .step-btn.active.bass { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+        .step-btn.active.lead { background: var(--accent-magenta); box-shadow: 0 0 8px var(--accent-magenta); }
+
+        .step-btn.current {
+            outline: 2px solid #fff;
+            outline-offset: 1px;
+        }
+
+        /* Footer */
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--panel-border);
+            padding-top: 12px;
+        }
+
+        .quick-presets {
+            display: flex;
+            gap: 6px;
+        }
+
+        .preset-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            padding: 4px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            font-family: 'Outfit', sans-serif;
+            transition: all 0.15s;
+        }
+
+        .preset-btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: var(--accent-cyan);
+        }
+    </style>
+</head>
+<body>
+
+<div class="groovebox-container">
+    <div class="header">
+        <div class="logo-area">
+            <span class="logo-badge">MCP APP</span>
+            <span class="title">SAL BAN Monolith Engine</span>
+        </div>
+        <div class="status-pill">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">LIVE SYNC</span>
+        </div>
+    </div>
+
+    <!-- Mini Scope Visualizer -->
+    <div class="scope-card">
+        <canvas id="scopeCanvas"></canvas>
+    </div>
+
+    <!-- Transport & Tempo -->
+    <div class="transport-bar">
+        <button class="play-btn" id="playBtn" onclick="togglePlay()">
+            <span id="playIcon">▶</span>
+            <span id="playText">PLAY</span>
+        </button>
+        <div class="bpm-control">
+            <span>TEMPO</span>
+            <input type="range" id="bpmSlider" min="60" max="180" value="138" oninput="updateBpm(this.value)">
+            <span class="bpm-val" id="bpmVal">138 BPM</span>
+        </div>
+    </div>
+
+    <!-- 16-Step Sequencer Grid -->
+    <div class="sequencer-card">
+        <!-- Kick -->
+        <div class="track-row kick">
+            <span class="track-label">KICK</span>
+            <button class="mute-btn" id="mute-kick" onclick="toggleMute('kick')">MUTE</button>
+            <div class="steps-container" id="grid-kick"></div>
+        </div>
+        <!-- Snare -->
+        <div class="track-row snare">
+            <span class="track-label">SNARE</span>
+            <button class="mute-btn" id="mute-snare" onclick="toggleMute('snare')">MUTE</button>
+            <div class="steps-container" id="grid-snare"></div>
+        </div>
+        <!-- Bass -->
+        <div class="track-row bass">
+            <span class="track-label">BASS</span>
+            <button class="mute-btn" id="mute-bass" onclick="toggleMute('bass')">MUTE</button>
+            <div class="steps-container" id="grid-bass"></div>
+        </div>
+        <!-- Lead -->
+        <div class="track-row lead">
+            <span class="track-label">LEAD</span>
+            <button class="mute-btn" id="mute-lead" onclick="toggleMute('lead')">MUTE</button>
+            <div class="steps-container" id="grid-lead"></div>
+        </div>
+    </div>
+
+    <!-- Footer Controls -->
+    <div class="footer">
+        <div class="quick-presets">
+            <button class="preset-btn" onclick="loadPreset('acid')">Acid Trance</button>
+            <button class="preset-btn" onclick="loadPreset('goa')">Goa Energy</button>
+            <button class="preset-btn" onclick="loadPreset('cyber')">Cyber Groove</button>
+        </div>
+        <div>SEP-1865 Compliant</div>
+    </div>
+</div>
+
+<script>
+    // State
+    let isPlaying = false;
+    let currentStep = 0;
+    let tempo = 138;
+    let timerId = null;
+
+    const tracks = {
+        kick: [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+        snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+        bass: [0,1,1,0, 0,1,1,0, 0,1,1,0, 0,1,1,0],
+        lead: [1,0,0,1, 0,0,1,0, 1,0,0,1, 0,1,0,0]
+    };
+
+    const mutes = { kick: false, snare: false, bass: false, lead: false };
+
+    // Build Step Grids
+    function initGrids() {
+        Object.keys(tracks).forEach(track => {
+            const container = document.getElementById(`grid-${track}`);
+            container.innerHTML = '';
+            for (let i = 0; i < 16; i++) {
+                const btn = document.createElement('div');
+                btn.className = `step-btn ${track} ${tracks[track][i] ? 'active' : ''}`;
+                btn.dataset.step = i;
+                btn.onclick = () => {
+                    tracks[track][i] = tracks[track][i] ? 0 : 1;
+                    btn.classList.toggle('active', !!tracks[track][i]);
+                    notifyHost('step_toggle', { track, step: i, active: !!tracks[track][i] });
+                };
+                container.appendChild(btn);
+            }
+        });
+    }
+
+    // Toggle Mutes
+    function toggleMute(track) {
+        mutes[track] = !mutes[track];
+        const btn = document.getElementById(`mute-${track}`);
+        btn.classList.toggle('muted', mutes[track]);
+        notifyHost('mute_toggle', { track, muted: mutes[track] });
+    }
+
+    // Transport
+    function togglePlay() {
+        isPlaying = !isPlaying;
+        const btn = document.getElementById('playBtn');
+        const icon = document.getElementById('playIcon');
+        const text = document.getElementById('playText');
+
+        if (isPlaying) {
+            btn.classList.add('playing');
+            icon.textContent = '⏸';
+            text.textContent = 'PAUSE';
+            startSequencer();
+        } else {
+            btn.classList.remove('playing');
+            icon.textContent = '▶';
+            text.textContent = 'PLAY';
+            clearInterval(timerId);
+            clearStepHighlights();
+        }
+
+        notifyHost('transport_toggle', { isPlaying });
+    }
+
+    function startSequencer() {
+        clearInterval(timerId);
+        const intervalMs = (60000 / tempo) / 4; // 16th notes
+        timerId = setInterval(() => {
+            clearStepHighlights();
+            Object.keys(tracks).forEach(track => {
+                const container = document.getElementById(`grid-${track}`);
+                const stepEl = container.children[currentStep];
+                if (stepEl) stepEl.classList.add('current');
+            });
+            currentStep = (currentStep + 1) % 16;
+        }, intervalMs);
+    }
+
+    function clearStepHighlights() {
+        document.querySelectorAll('.step-btn.current').forEach(el => el.classList.remove('current'));
+    }
+
+    function updateBpm(val) {
+        tempo = parseInt(val, 10);
+        document.getElementById('bpmVal').textContent = `${tempo} BPM`;
+        if (isPlaying) startSequencer();
+        notifyHost('tempo_change', { tempo });
+    }
+
+    function loadPreset(name) {
+        if (name === 'acid') {
+            tracks.kick = [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0];
+            tracks.snare = [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0];
+            tracks.bass = [0,1,1,0, 0,1,1,0, 0,1,1,0, 0,1,1,0];
+            tracks.lead = [1,0,1,0, 1,1,0,1, 1,0,1,0, 1,1,1,0];
+        } else if (name === 'goa') {
+            tracks.kick = [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0];
+            tracks.snare = [0,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0];
+            tracks.bass = [0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1];
+            tracks.lead = [1,1,0,1, 0,1,1,0, 1,0,1,1, 0,1,0,1];
+        } else {
+            tracks.kick = [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0];
+            tracks.snare = [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0];
+            tracks.bass = [1,0,0,1, 0,0,1,0, 1,0,0,1, 0,0,1,0];
+            tracks.lead = [0,0,1,0, 1,0,0,1, 0,0,1,0, 1,0,0,0];
+        }
+        initGrids();
+        notifyHost('preset_load', { presetName: name });
+    }
+
+    // Host Communication (SEP-1865 PostMessage)
+    function notifyHost(type, payload) {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({
+                source: 'mcp-app-groovebox',
+                type,
+                payload,
+                timestamp: Date.now()
+            }, '*');
+        }
+    }
+
+    // Listen for incoming host messages
+    window.addEventListener('message', (event) => {
+        if (!event.data || event.data.source !== 'mcp-host') return;
+        const { type, payload } = event.data;
+        if (type === 'sync_state' && payload) {
+            if (payload.tempo) {
+                tempo = payload.tempo;
+                document.getElementById('bpmSlider').value = tempo;
+                document.getElementById('bpmVal').textContent = `${tempo} BPM`;
+            }
+        }
+    });
+
+    // Canvas Scope Visualization
+    const canvas = document.getElementById('scopeCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = canvas.parentElement.clientHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    let phase = 0;
+    function drawScope() {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = isPlaying ? '#39ff14' : '#4a5568';
+        ctx.shadowBlur = isPlaying ? 8 : 0;
+        ctx.shadowColor = '#39ff14';
+
+        ctx.beginPath();
+        const sliceWidth = canvas.width / 100;
+        let x = 0;
+
+        for (let i = 0; i < 100; i++) {
+            const v = isPlaying 
+                ? Math.sin(i * 0.2 + phase) * 0.4 + Math.sin(i * 0.5 - phase) * 0.3
+                : Math.sin(i * 0.1) * 0.05;
+            const y = (v + 1) * (canvas.height / 2);
+
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+            x += sliceWidth;
+        }
+
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        if (isPlaying) phase += 0.15;
+        requestAnimationFrame(drawScope);
+    }
+
+    initGrids();
+    drawScope();
+</script>
+</body>
+</html>

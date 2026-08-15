@@ -3,6 +3,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json tsconfig.json ./
 COPY src ./src
+COPY public ./public
 RUN npm install
 RUN npm run build
 
@@ -15,8 +16,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
 
-# Copy compiled JavaScript from the builder stage
+# Copy compiled JavaScript and public assets
 COPY --from=builder /app/build ./build
+COPY --from=builder /app/public ./public
 
 # Restrict write permissions on all compiled assets to prevent post-exploitation modifications
 RUN chown -R root:root /app && \

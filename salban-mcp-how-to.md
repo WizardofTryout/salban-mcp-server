@@ -1,6 +1,9 @@
 # SAL BAN MCP Server - How-To Guide
 
-Dieses Dokument beschreibt die Architektur, Konfiguration, Nutzung und zukünftige Erweiterung des **SAL BAN Model Context Protocol (MCP) Servers**. Es dient als Referenz für Entwickler und zukünftige KI-Assistenten.
+Dieses Dokument beschreibt die Architektur, Konfiguration, Nutzung und Erweiterung des **SAL BAN Model Context Protocol (MCP) Servers** (MCP Spezifikation **2026-07-28 Compliant**). Es dient als Referenz für Entwickler und KI-Assistenten.
+
+* **Offizielles GitHub Repository:** [WizardofTryout/salban-mcp-server](https://github.com/WizardofTryout/salban-mcp-server)
+* **Live Monolith Engine:** [salban.de](https://salban.de)
 
 ---
 
