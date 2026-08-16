@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { WebSocketServer, WebSocket } from "ws";
 import { z } from "zod";
-import { IncomingMessage } from "http";
+import http, { IncomingMessage, ServerResponse } from "http";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -131,9 +131,47 @@ function updateMcpTask(id: string, updates: Partial<Pick<McpTask, "status" | "pr
   task.updatedAt = Date.now();
 }
 
+// Create combined HTTP server for static MCP App assets & WebSocket transport
+const httpServer = http.createServer((req: IncomingMessage, res: ServerResponse) => {
+  const parsedUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+  let pathname = parsedUrl.pathname;
+  if (pathname === "/" || pathname === "") {
+    pathname = "/mcp-app-groovebox.html";
+  }
+
+  // Health check endpoint
+  if (pathname === "/health" || pathname === "/status") {
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ status: "ok", server: "salban-mcp", version: "1.1.0" }));
+    return;
+  }
+
+  // Sanitize path to prevent directory traversal
+  const safePath = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, "");
+  const publicDir = path.resolve(__dirname, "..", "public");
+  const filePath = path.join(publicDir, safePath);
+
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    const ext = path.extname(filePath).toLowerCase();
+    const contentType = ext === ".html" ? "text/html" :
+                        ext === ".js" ? "application/javascript" :
+                        ext === ".css" ? "text/css" :
+                        ext === ".json" ? "application/json" :
+                        ext === ".png" ? "image/png" : "text/plain";
+    res.writeHead(200, {
+      "Content-Type": contentType,
+      "Access-Control-Allow-Origin": "*"
+    });
+    fs.createReadStream(filePath).pipe(res);
+  } else {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("Not Found");
+  }
+});
+
 // Initialize WebSocket Server with 50MB payload limit and strict client verification
 const wss = new WebSocketServer({
-  port: WS_PORT,
+  server: httpServer,
   maxPayload: 50 * 1024 * 1024, // 50MB payload size limit
   verifyClient: (
     info: { origin: string; req: IncomingMessage; secure: boolean },
@@ -176,14 +214,22 @@ const wss = new WebSocketServer({
   }
 });
 
-wss.on("error", (err: any) => {
+httpServer.listen(WS_PORT, () => {
+  console.error(`[SAL BAN Server] HTTP & WebSocket bridge listening on port ${WS_PORT}`);
+});
+
+httpServer.on("error", (err: any) => {
   if (err.code === "EADDRINUSE") {
     console.error(`\n⚠️ [WS Warning] Port ${WS_PORT} is already in use by another process.`);
     console.error(`   If a background SAL BAN MCP container is running, WebSocket traffic will route through it.`);
     console.error(`   MCP Stdio transport remains active.\n`);
   } else {
-    console.error("[WS Error]", err);
+    console.error("[Server Error]", err);
   }
+});
+
+wss.on("error", (err: any) => {
+  console.error("[WS Error]", err);
 });
 
 wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
