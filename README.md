@@ -40,7 +40,7 @@ When your local MCP Server is running (on Docker or Node.js), open the demo in a
   <tr>
     <td width="33%">
       <h4>🔊 Built-in Web Audio DSP</h4>
-      <p>Features an autonomous 4-voice audio synthesizer: <strong>808/909 punchy kick</strong>, <strong>noise snare/clap</strong>, <strong>303 resonant acid bassline</strong>, and <strong>cutting square lead</strong> running completely in JavaScript memory.</p>
+      <p>Features an autonomous 4-voice audio synthesizer: <strong>electronic punchy kick</strong>, <strong>noise snare/clap</strong>, <strong>resonant acid bassline</strong>, and <strong>cutting square lead</strong> running completely in JavaScript memory.</p>
     </td>
     <td width="33%">
       <h4>⚡ Real-Time Audio Oscilloscope</h4>
