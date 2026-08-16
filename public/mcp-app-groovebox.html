@@ -365,7 +365,136 @@
         lead: [1,0,0,1, 0,0,1,0, 1,0,0,1, 0,1,0,0]
     };
 
+    const bassNotes = [110, 110, 110, 130.81, 110, 110, 146.83, 164.81, 110, 110, 110, 130.81, 110, 146.83, 164.81, 220];
+    const leadNotes = [220, 261.63, 329.63, 392.00, 440, 523.25, 440, 392, 329.63, 261.63, 329.63, 392, 440, 523.25, 659.25, 440];
+
     const mutes = { kick: false, snare: false, bass: false, lead: false };
+
+    // --- Web Audio Synthesizer Engine ---
+    let audioCtx = null;
+    let masterGain = null;
+    let analyser = null;
+    let dataArray = null;
+
+    function initAudio() {
+        if (!audioCtx) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContext();
+            masterGain = audioCtx.createGain();
+            masterGain.gain.setValueAtTime(0.7, audioCtx.currentTime);
+
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 256;
+            analyser.smoothingTimeConstant = 0.8;
+            dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+            masterGain.connect(analyser);
+            analyser.connect(audioCtx.destination);
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+    }
+
+    function playKick() {
+        if (!audioCtx || mutes.kick) return;
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(38, now + 0.12);
+
+        gain.gain.setValueAtTime(1.0, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.start(now);
+        osc.stop(now + 0.36);
+    }
+
+    function playSnare() {
+        if (!audioCtx || mutes.snare) return;
+        const now = audioCtx.currentTime;
+        
+        // Noise buffer
+        const bufferSize = audioCtx.sampleRate * 0.15;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const output = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            output[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+
+        const noiseFilter = audioCtx.createBiquadFilter();
+        noiseFilter.type = 'highpass';
+        noiseFilter.frequency.setValueAtTime(800, now);
+
+        const noiseGain = audioCtx.createGain();
+        noiseGain.gain.setValueAtTime(0.8, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+        noise.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(masterGain);
+
+        noise.start(now);
+        noise.stop(now + 0.2);
+    }
+
+    function playBass(stepIdx) {
+        if (!audioCtx || mutes.bass) return;
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const filter = audioCtx.createBiquadFilter();
+        const gain = audioCtx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(bassNotes[stepIdx % 16] || 110, now);
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1800, now);
+        filter.frequency.exponentialRampToValueAtTime(120, now + 0.18);
+        filter.Q.setValueAtTime(8, now);
+
+        gain.gain.setValueAtTime(0.8, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(masterGain);
+
+        osc.start(now);
+        osc.stop(now + 0.25);
+    }
+
+    function playLead(stepIdx) {
+        if (!audioCtx || mutes.lead) return;
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const filter = audioCtx.createBiquadFilter();
+        const gain = audioCtx.createGain();
+
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(leadNotes[stepIdx % 16] || 440, now);
+
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(2200, now);
+        filter.Q.setValueAtTime(4, now);
+
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(masterGain);
+
+        osc.start(now);
+        osc.stop(now + 0.18);
+    }
 
     // Build Step Grids
     function initGrids() {
@@ -377,9 +506,11 @@
                 btn.className = `step-btn ${track} ${tracks[track][i] ? 'active' : ''}`;
                 btn.dataset.step = i;
                 btn.onclick = () => {
+                    initAudio();
                     tracks[track][i] = tracks[track][i] ? 0 : 1;
                     btn.classList.toggle('active', !!tracks[track][i]);
                     notifyHost('step_toggle', { track, step: i, active: !!tracks[track][i] });
+                    syncTrackToBridge(track);
                 };
                 container.appendChild(btn);
             }
@@ -388,14 +519,19 @@
 
     // Toggle Mutes
     function toggleMute(track) {
+        initAudio();
         mutes[track] = !mutes[track];
         const btn = document.getElementById(`mute-${track}`);
         btn.classList.toggle('muted', mutes[track]);
         notifyHost('mute_toggle', { track, muted: mutes[track] });
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'tweak_parameter', path: `mixer.${track}.mute`, value: mutes[track] }));
+        }
     }
 
     // Transport
     function togglePlay() {
+        initAudio();
         isPlaying = !isPlaying;
         const btn = document.getElementById('playBtn');
         const icon = document.getElementById('playIcon');
@@ -415,6 +551,9 @@
         }
 
         notifyHost('transport_toggle', { isPlaying });
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'set_transport_state', playing: isPlaying }));
+        }
     }
 
     function startSequencer() {
@@ -422,6 +561,13 @@
         const intervalMs = (60000 / tempo) / 4; // 16th notes
         timerId = setInterval(() => {
             clearStepHighlights();
+            
+            // Audio Trigger for current step
+            if (tracks.kick[currentStep]) playKick();
+            if (tracks.snare[currentStep]) playSnare();
+            if (tracks.bass[currentStep]) playBass(currentStep);
+            if (tracks.lead[currentStep]) playLead(currentStep);
+
             Object.keys(tracks).forEach(track => {
                 const container = document.getElementById(`grid-${track}`);
                 const stepEl = container.children[currentStep];
@@ -440,28 +586,92 @@
         document.getElementById('bpmVal').textContent = `${tempo} BPM`;
         if (isPlaying) startSequencer();
         notifyHost('tempo_change', { tempo });
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'tweak_parameter', path: 'tempo', value: tempo }));
+        }
     }
 
     function loadPreset(name) {
+        initAudio();
         if (name === 'acid') {
+            tempo = 138;
             tracks.kick = [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0];
             tracks.snare = [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0];
             tracks.bass = [0,1,1,0, 0,1,1,0, 0,1,1,0, 0,1,1,0];
             tracks.lead = [1,0,1,0, 1,1,0,1, 1,0,1,0, 1,1,1,0];
         } else if (name === 'goa') {
+            tempo = 142;
             tracks.kick = [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0];
             tracks.snare = [0,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0];
             tracks.bass = [0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1];
             tracks.lead = [1,1,0,1, 0,1,1,0, 1,0,1,1, 0,1,0,1];
         } else {
+            tempo = 132;
             tracks.kick = [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0];
             tracks.snare = [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0];
             tracks.bass = [1,0,0,1, 0,0,1,0, 1,0,0,1, 0,0,1,0];
             tracks.lead = [0,0,1,0, 1,0,0,1, 0,0,1,0, 1,0,0,0];
         }
+        document.getElementById('bpmSlider').value = tempo;
+        document.getElementById('bpmVal').textContent = `${tempo} BPM`;
+        if (isPlaying) startSequencer();
         initGrids();
         notifyHost('preset_load', { presetName: name });
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'tweak_parameter', path: 'tempo', value: tempo }));
+        }
     }
+
+    function syncTrackToBridge(track) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            if (track === 'kick' || track === 'snare') {
+                ws.send(JSON.stringify({
+                    type: 'set_drum_sequence',
+                    drumType: track,
+                    steps: tracks[track]
+                }));
+            }
+        }
+    }
+
+    // --- WebSocket Live Bridge (Port 8080) ---
+    let ws = null;
+    function connectBridge() {
+        try {
+            const host = window.location.hostname || 'localhost';
+            ws = new WebSocket(`ws://${host}:8080`);
+
+            ws.onopen = () => {
+                const liveBadge = document.querySelector('.live-indicator');
+                if (liveBadge) {
+                    liveBadge.style.background = 'rgba(57, 255, 20, 0.15)';
+                    liveBadge.style.color = '#39ff14';
+                    liveBadge.style.borderColor = 'rgba(57, 255, 20, 0.4)';
+                    liveBadge.innerHTML = '<span style="display:inline-block; width:6px; height:6px; background:#39ff14; border-radius:50%; margin-right:4px; box-shadow:0 0 8px #39ff14;"></span> LIVE LINKED';
+                }
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data && (data.type === 'state_sync' || data.preset)) {
+                        const p = data.preset || data;
+                        if (p.tempo && p.tempo !== tempo) {
+                            tempo = p.tempo;
+                            document.getElementById('bpmSlider').value = tempo;
+                            document.getElementById('bpmVal').textContent = `${tempo} BPM`;
+                            if (isPlaying) startSequencer();
+                        }
+                    }
+                } catch(e) {}
+            };
+
+            ws.onclose = () => {
+                setTimeout(connectBridge, 3000);
+            };
+        } catch(e) {}
+    }
+    connectBridge();
 
     // Host Communication (SEP-1865 PostMessage)
     function notifyHost(type, payload) {
@@ -501,7 +711,7 @@
 
     let phase = 0;
     function drawScope() {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.lineWidth = 2;
@@ -510,18 +720,30 @@
         ctx.shadowColor = '#39ff14';
 
         ctx.beginPath();
-        const sliceWidth = canvas.width / 100;
-        let x = 0;
 
-        for (let i = 0; i < 100; i++) {
-            const v = isPlaying 
-                ? Math.sin(i * 0.2 + phase) * 0.4 + Math.sin(i * 0.5 - phase) * 0.3
-                : Math.sin(i * 0.1) * 0.05;
-            const y = (v + 1) * (canvas.height / 2);
-
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-            x += sliceWidth;
+        if (analyser && dataArray && isPlaying) {
+            analyser.getByteTimeDomainData(dataArray);
+            const sliceWidth = canvas.width / analyser.frequencyBinCount;
+            let x = 0;
+            for (let i = 0; i < analyser.frequencyBinCount; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = v * (canvas.height / 2);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+                x += sliceWidth;
+            }
+        } else {
+            const sliceWidth = canvas.width / 100;
+            let x = 0;
+            for (let i = 0; i < 100; i++) {
+                const v = isPlaying 
+                    ? Math.sin(i * 0.2 + phase) * 0.4 + Math.sin(i * 0.5 - phase) * 0.3
+                    : Math.sin(i * 0.1) * 0.05;
+                const y = (v + 1) * (canvas.height / 2);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+                x += sliceWidth;
+            }
         }
 
         ctx.stroke();
