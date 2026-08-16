@@ -246,34 +246,76 @@ Add the following entry (adjusting the paths or command if running via Docker):
 
 ---
 
-## 📱 Interactive MCP Apps (SEP-1865) & Live Demo
+## 🌟 Spotlight: Interactive MCP Apps (SEP-1865) & Live Groovebox Widget
 
-The server implements the **SEP-1865 MCP Apps Specification**, allowing AI coding assistants and chat hosts to embed rich, interactive HTML5/Canvas UI widgets directly into the conversation.
-
-### 🎛️ Live Groovebox Widget Demo (`/mcp-app-groovebox.html`)
-
-When running the MCP Server locally on port 8080, you can open the built-in Groovebox demo directly in any web browser:
-
-👉 **[http://localhost:8080/mcp-app-groovebox.html](http://localhost:8080/mcp-app-groovebox.html)** (or `http://localhost:8080`)
+> [!TIP]
+> **Experience the future of AI music interaction!** With the **SEP-1865 MCP Apps Specification**, AI assistants don't just output text or JSON — they embed full-fledged, interactive, hardware-inspired UI widgets directly inside the chat.
 
 <p align="center">
-  <img src="assets/011-sequencer.png" alt="Groovebox MCP App Widget" width="60%" />
+  <img src="assets/mcp-app-groovebox-widget.png" alt="SAL BAN Monolith Engine - Interactive Groovebox MCP App" width="75%" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); margin: 16px 0;" />
 </p>
 
-#### Features of the Built-in MCP App:
-1. **Integrated Web Audio DSP Synthesis:**
-   - Standalone 4-voice audio engine generating punchy 808/909 kicks, noise claps/snares, 303 sawtooth acid basslines, and square leads in real time.
-2. **Real-time FFT Oscilloscope:**
-   - Driven by a Web Audio `AnalyserNode`, dynamically vibrating to the actual audio output.
-3. **Bi-directional Live Studio Bridge (`ws://localhost:8080`):**
-   - Interacting with the widget (pressing Play, toggling steps, moving the BPM slider, or loading presets) automatically remote-controls the full **[SAL BAN Monolith Studio](https://salban.de/#synth-console)** in real time!
-   - Changes made by the AI or in the main studio sync back to the widget instantly.
+### 🚀 Try the Live Groovebox MCP App
 
-#### Building Custom MCP Apps:
-Developers can easily build custom widgets (DJ crossfaders, piano rolls, 3D visualizers) using standard web technologies:
-- **Host Communication:** The widget sends standard `postMessage` events (`SEP-1865`) to the AI parent container.
-- **WebSocket Bridge:** Connects to `ws://localhost:8080` to send commands (`set_transport_state`, `tweak_parameter`, `set_drum_sequence`, `apply_preset`) and receive live `state_sync` updates.
-- **Source Code Reference:** See `public/mcp-app-groovebox.html` as a complete, self-contained reference implementation.
+When your local MCP Server is running (on Docker or Node.js), open the demo in any modern browser:
+
+👉 **[http://localhost:8080/mcp-app-groovebox.html](http://localhost:8080/mcp-app-groovebox.html)** *(or `http://localhost:8080`)*
+
+---
+
+### 🎛️ What Makes This MCP App So Powerful?
+
+<table>
+  <tr>
+    <td width="33%">
+      <h4>🔊 Built-in Web Audio DSP</h4>
+      <p>Features an autonomous 4-voice audio synthesizer: <strong>808/909 punchy kick</strong>, <strong>noise snare/clap</strong>, <strong>303 resonant acid bassline</strong>, and <strong>cutting square lead</strong> running completely in JavaScript memory.</p>
+    </td>
+    <td width="33%">
+      <h4>⚡ Real-Time Audio Oscilloscope</h4>
+      <p>A high-performance Canvas oscilloscope driven by a Web Audio <code>AnalyserNode</code> that dynamically vibrates and responds to the real audio frequencies played by the synth.</p>
+    </td>
+    <td width="33%">
+      <h4>🔗 Bi-Directional Studio Sync</h4>
+      <p>Connected via <code>ws://localhost:8080</code>. Toggling steps, hitting <strong>PLAY</strong>, or tweaking tempo in the widget immediately remote-controls the full <a href="https://salban.de/#synth-console">SAL BAN Monolith Studio</a> in real time!</p>
+    </td>
+  </tr>
+</table>
+
+---
+
+### 🛠️ Developer Guide: How to Build Your Own MCP Apps
+
+Any creator or developer can use `public/mcp-app-groovebox.html` as a reference boilerplate to create custom AI chat widgets:
+
+1. **Host-to-Widget Communication (SEP-1865 standard):**
+   ```javascript
+   // Listen for incoming state updates from the AI host (Claude / Antigravity / Cursor)
+   window.addEventListener('message', (event) => {
+     if (event.data?.source === 'mcp-host' && event.data.type === 'sync_state') {
+       updateWidgetUI(event.data.payload);
+     }
+   });
+
+   // Notify the AI host when the user interacts with the widget
+   function notifyHost(type, payload) {
+     if (window.parent && window.parent !== window) {
+       window.parent.postMessage({ source: 'mcp-app-groovebox', type, payload, timestamp: Date.now() }, '*');
+     }
+   }
+   ```
+
+2. **Direct WebSocket Studio Bridge:**
+   Connect to `ws://localhost:8080` to send commands directly to the live synthesizer:
+   - `set_transport_state`: `{ type: "set_transport_state", playing: true }`
+   - `tweak_parameter`: `{ type: "tweak_parameter", path: "cutoff", value: 75 }`
+   - `set_drum_sequence`: `{ type: "set_drum_sequence", drumType: "kick", steps: [...] }`
+   - `apply_preset`: `{ type: "apply_preset", preset: {...} }`
+
+3. **Ideas for Custom MCP Apps:**
+   - 🎚️ **DJ Mixer & Crossfader:** Blend stems between different song arrangement scenes.
+   - 🎹 **Polyphonic Piano Roll:** Chord drawing widget for the 8-voice Morph32 synthesizer.
+   - 🌌 **3D Audio Visualizer:** WebGL / Three.js particle sphere reacting to the master audio stream.
 
 ---
 
