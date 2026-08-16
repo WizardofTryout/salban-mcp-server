@@ -246,6 +246,37 @@ Add the following entry (adjusting the paths or command if running via Docker):
 
 ---
 
+## 📱 Interactive MCP Apps (SEP-1865) & Live Demo
+
+The server implements the **SEP-1865 MCP Apps Specification**, allowing AI coding assistants and chat hosts to embed rich, interactive HTML5/Canvas UI widgets directly into the conversation.
+
+### 🎛️ Live Groovebox Widget Demo (`/mcp-app-groovebox.html`)
+
+When running the MCP Server locally on port 8080, you can open the built-in Groovebox demo directly in any web browser:
+
+👉 **[http://localhost:8080/mcp-app-groovebox.html](http://localhost:8080/mcp-app-groovebox.html)** (or `http://localhost:8080`)
+
+<p align="center">
+  <img src="assets/011-sequencer.png" alt="Groovebox MCP App Widget" width="60%" />
+</p>
+
+#### Features of the Built-in MCP App:
+1. **Integrated Web Audio DSP Synthesis:**
+   - Standalone 4-voice audio engine generating punchy 808/909 kicks, noise claps/snares, 303 sawtooth acid basslines, and square leads in real time.
+2. **Real-time FFT Oscilloscope:**
+   - Driven by a Web Audio `AnalyserNode`, dynamically vibrating to the actual audio output.
+3. **Bi-directional Live Studio Bridge (`ws://localhost:8080`):**
+   - Interacting with the widget (pressing Play, toggling steps, moving the BPM slider, or loading presets) automatically remote-controls the full **[SAL BAN Monolith Studio](https://salban.de/#synth-console)** in real time!
+   - Changes made by the AI or in the main studio sync back to the widget instantly.
+
+#### Building Custom MCP Apps:
+Developers can easily build custom widgets (DJ crossfaders, piano rolls, 3D visualizers) using standard web technologies:
+- **Host Communication:** The widget sends standard `postMessage` events (`SEP-1865`) to the AI parent container.
+- **WebSocket Bridge:** Connects to `ws://localhost:8080` to send commands (`set_transport_state`, `tweak_parameter`, `set_drum_sequence`, `apply_preset`) and receive live `state_sync` updates.
+- **Source Code Reference:** See `public/mcp-app-groovebox.html` as a complete, self-contained reference implementation.
+
+---
+
 ## 📡 Registered MCP Tools
 
 The server exposes **38 rich semantic tools** to the AI assistant, organized into functional groups:
